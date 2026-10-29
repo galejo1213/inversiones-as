@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Inversiones AS</title>
+<meta name="theme-color" content="#14213D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Inversiones AS">
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --tinta:#14213D; --papel:#EEF1F5; --hoja:#FFFFFF; --linea:#D6DCE5; --suave:#5B6678;
+  --alejo:#2F5DDB; --sebas:#E59A2F; --banco:#B9C2CF;
+  --entra:#2E8B57; --sale:#C2453A; --aviso:#B7791F;
+  --radio:14px; --sombra:0 1px 2px rgba(20,33,61,.06),0 6px 24px rgba(20,33,61,.06);
+  --disp:'Archivo',system-ui,sans-serif; --cuerpo:'Public Sans',system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --tinta:#E8ECF3; --papel:#0E1424; --hoja:#161E31; --linea:#2A3550; --suave:#98A3B8;
+  --alejo:#6E8FF0; --sebas:#F0B259; --banco:#3A4762; --entra:#5CC08A; --sale:#EE7A6E; --aviso:#E2A53E;
+  --sombra:none; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0;overflow-x:hidden;background:var(--papel);color:var(--tinta);font:15px/1.5 var(--cuerpo);-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--alejo);outline-offset:2px;border-radius:6px}
+.num,.disp{font-family:var(--disp);font-variant-numeric:tabular-nums}
+.disp{font-stretch:118%;font-weight:700;letter-spacing:-.01em}
+.eti{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--suave);font-weight:600}
+.suave{color:var(--suave)} .entra{color:var(--entra)} .sale{color:var(--sale)}
+a{color:var(--alejo)}
+
+/* layout */
+.app{display:grid;grid-template-columns:232px minmax(0,1fr);min-height:100vh}
+.lado{position:sticky;top:0;height:100vh;padding:24px 16px;border-right:1px solid var(--linea);display:flex;flex-direction:column;gap:20px}
+.marca{font-family:var(--disp);font-stretch:125%;font-weight:800;font-size:18px;line-height:1.1}
+.marca small{display:block;font:500 12px var(--cuerpo);color:var(--suave);letter-spacing:0;margin-top:4px}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav button{all:unset;cursor:pointer;padding:9px 12px;border-radius:10px;font-weight:500;color:var(--suave)}
+.nav button:hover{background:var(--hoja)}
+.nav button[aria-current=page]{background:var(--hoja);color:var(--tinta);box-shadow:var(--sombra)}
+.nav button:focus-visible{outline:2px solid var(--alejo)}
+.pie{margin-top:auto;font-size:12px;color:var(--suave);word-break:break-all}
+main{padding:28px clamp(16px,4vw,40px) 120px;max-width:1120px;width:100%}
+.cab{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:22px;flex-wrap:wrap}
+.cab h1{margin:0;font-family:var(--disp);font-stretch:112%;font-size:clamp(24px,3.4vw,34px);line-height:1.05;font-weight:750}
+.cab .lugar{color:var(--suave);font-size:14px;margin-top:4px}
+select.inv{border:1px solid var(--linea);background:var(--hoja);border-radius:10px;padding:7px 10px}
+
+.rejilla{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px}
+.rejilla>*{min-width:0}
+.c{background:var(--hoja);border-radius:var(--radio);box-shadow:var(--sombra);padding:20px;border:1px solid var(--linea);min-width:0}
+.c h2{margin:0 0 14px;font:600 13px var(--cuerpo);letter-spacing:.06em;text-transform:uppercase;color:var(--suave);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.s12{grid-column:span 12}.s8{grid-column:span 8}.s7{grid-column:span 7}.s6{grid-column:span 6}.s5{grid-column:span 5}.s4{grid-column:span 4}
+
+/* firma: el apto en m² */
+.m2 h3{margin:0 0 18px;font-family:var(--disp);font-stretch:110%;font-weight:600;font-size:clamp(20px,2.6vw,28px);line-height:1.2}
+.m2 h3 b{font-stretch:125%;font-weight:800;font-size:1.9em;line-height:.9;vertical-align:-.08em}
+.cota{position:relative;border-top:1px solid var(--suave);margin:8px 0 10px;height:0}
+.cota::before,.cota::after{content:"";position:absolute;top:-6px;height:11px;border-left:1px solid var(--suave)}
+.cota::before{left:0}.cota::after{right:0}
+.cota span{position:absolute;left:50%;top:-10px;transform:translateX(-50%);background:var(--hoja);padding:0 8px;font:600 11px var(--disp);font-stretch:118%;letter-spacing:.08em;color:var(--suave)}
+.planta{display:grid;grid-template-columns:repeat(17,1fr);gap:3px}
+.planta i{aspect-ratio:1;border-radius:3px;background:var(--banco);opacity:0;transform:scale(.6);animation:pone .35s ease forwards}
+.planta.quieta i{animation:none;opacity:1;transform:none}
+.planta i.banco{background:repeating-linear-gradient(135deg,var(--banco) 0 3px,transparent 3px 6px);border:1px solid var(--banco)}
+.planta i.alejo{background:var(--alejo)}.planta i.sebas{background:var(--sebas)}
+@keyframes pone{to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.planta i{animation:none;opacity:1;transform:none}}
+.leyenda{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:14px;font-size:13px}
+.leyenda span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px;background:var(--k)}
+.cifras{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px 20px;margin-top:20px;padding-top:16px;border-top:1px dashed var(--linea)}
+.cifras div b{display:block;font-family:var(--disp);font-stretch:112%;font-size:19px;font-weight:700}
+
+.big{font-family:var(--disp);font-stretch:118%;font-weight:750;font-size:clamp(26px,3.6vw,36px);line-height:1.05}
+.fila{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:8px 0;border-bottom:1px solid var(--linea)}
+.fila:last-child{border-bottom:0}
+.barra{height:8px;border-radius:99px;background:var(--linea);overflow:hidden;display:flex}
+.barra i{display:block;height:100%}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:2px 8px;border-radius:99px;background:var(--papel);color:var(--suave);white-space:nowrap}
+.chip.alejo{background:color-mix(in srgb,var(--alejo) 14%,transparent);color:var(--alejo)}
+.chip.sebas{background:color-mix(in srgb,var(--sebas) 18%,transparent);color:color-mix(in srgb,var(--sebas) 70%,var(--tinta))}
+.alerta{border-left:3px solid var(--aviso);background:color-mix(in srgb,var(--aviso) 10%,transparent);padding:10px 12px;border-radius:8px;font-size:14px}
+
+.btn{border:1px solid var(--linea);background:var(--hoja);border-radius:10px;padding:9px 14px;font-weight:600;cursor:pointer}
+.btn:hover{border-color:var(--suave)}
+.btn.pri{background:var(--tinta);color:var(--papel);border-color:var(--tinta)}
+.btn.peli{color:var(--sale)}
+.btn.sm{padding:5px 10px;font-size:13px}
+.mas{position:fixed;right:max(20px,env(safe-area-inset-right));bottom:max(20px,env(safe-area-inset-bottom));width:58px;height:58px;border-radius:50%;border:0;background:var(--tinta);color:var(--papel);font-size:30px;line-height:1;cursor:pointer;box-shadow:0 8px 24px rgba(20,33,61,.3);z-index:5}
+
+/* movimientos */
+.filtros{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.filtros input,.filtros select{border:1px solid var(--linea);background:var(--hoja);border-radius:10px;padding:8px 10px}
+.filtros input{flex:1;min-width:160px}
+.mesg{margin:0 0 18px}
+.mesg header{display:flex;justify-content:space-between;align-items:baseline;padding:0 4px 6px;position:sticky;top:0;background:var(--papel);z-index:1}
+.mesg header b{font-family:var(--disp);font-stretch:115%;font-size:16px;text-transform:capitalize}
+.mov{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:11px 16px;border-bottom:1px solid var(--linea);cursor:pointer;background:var(--hoja)}
+.mov:hover{background:color-mix(in srgb,var(--papel) 50%,var(--hoja))}
+.mov:first-of-type{border-radius:12px 12px 0 0}.mov:last-of-type{border-radius:0 0 12px 12px;border-bottom:0}
+.mov:only-of-type{border-radius:12px}
+.mov .val{font-family:var(--disp);font-stretch:110%;font-weight:650;text-align:right}
+.mov small{color:var(--suave);font-size:12.5px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.lista{border:1px solid var(--linea);border-radius:12px;box-shadow:var(--sombra)}
+
+/* gráficos */
+.graf svg{width:100%;height:auto;display:block}
+.cat{display:grid;grid-template-columns:minmax(110px,170px) 1fr auto;gap:8px 12px;align-items:center;font-size:14px}
+.cat .barra{height:10px}
+
+/* agenda */
+.rec{display:grid;grid-template-columns:64px 1fr auto;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--linea)}
+.rec:last-child{border-bottom:0}
+.dia{text-align:center;border:1px solid var(--linea);border-radius:10px;padding:6px 0;line-height:1.1}
+.dia b{display:block;font-family:var(--disp);font-stretch:120%;font-size:20px}
+.dia span{font-size:11px;text-transform:uppercase;color:var(--suave);letter-spacing:.06em}
+.dia.pronto{border-color:var(--aviso);background:color-mix(in srgb,var(--aviso) 12%,transparent)}
+.dia.vencido{border-color:var(--sale);background:color-mix(in srgb,var(--sale) 12%,transparent)}
+
+/* formularios */
+dialog{border:0;border-radius:18px;padding:0;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 24px);background:var(--hoja);color:var(--tinta);box-shadow:0 24px 80px rgba(0,0,0,.35)}
+dialog::backdrop{background:rgba(14,20,36,.45);backdrop-filter:blur(2px)}
+dialog form{padding:22px;display:flex;flex-direction:column;gap:14px}
+dialog h2{margin:0;font-family:var(--disp);font-stretch:115%;font-size:22px}
+label{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:600;color:var(--suave)}
+input,select,textarea{border:1px solid var(--linea);border-radius:10px;padding:10px 12px;background:var(--papel);font-weight:400;font-size:16px;width:100%}
+.dos{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.acc{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:6px}
+.acc div{display:flex;gap:8px}
+.segm{display:flex;gap:6px;flex-wrap:wrap}
+.segm label{flex-direction:row;align-items:center;gap:6px;border:1px solid var(--linea);border-radius:99px;padding:6px 12px;cursor:pointer;color:var(--tinta);font-weight:500}
+.segm input{width:auto}
+.segm label:has(input:checked){background:var(--tinta);color:var(--papel);border-color:var(--tinta)}
+.linea-mes{display:grid;grid-template-columns:auto 1fr 140px;gap:10px;align-items:center}
+.linea-mes input[type=checkbox]{width:18px;height:18px}
+.total{background:var(--papel);border-radius:12px;padding:12px 14px}
+
+/* login */
+.login{min-height:100vh;display:grid;place-items:center;padding:24px}
+.login .c{max-width:420px;text-align:left}
+.login .planta{margin:22px 0}
+.vacio{text-align:center;padding:48px 20px}
+
+@media (max-width:900px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .lado{position:sticky;height:auto;flex-direction:row;align-items:center;padding:10px 12px;border-right:0;border-bottom:1px solid var(--linea);background:var(--papel);z-index:4;gap:12px}
+  .lado .pie{display:none}
+  .marca small{display:none}
+  .nav{flex-direction:row;overflow-x:auto;scrollbar-width:none}
+  .nav button{white-space:nowrap;padding:7px 11px}
+  .s8,.s7,.s6,.s5,.s4{grid-column:span 12}
+  main{padding-top:18px}
+  .mesg header{top:56px}
+}
+@media (max-width:520px){.dos{grid-template-columns:1fr}.mov small:last-child{grid-column:1/-1;justify-content:flex-start}.mov small:last-child:empty{display:none}.linea-mes{grid-template-columns:auto 1fr 110px}.cat{grid-template-columns:96px 1fr auto}}
+</style>
+</head>
+<body>
+<div id="app" aria-live="polite"></div>
+<dialog id="dlg"></dialog>
+
+<script type="module">
+// ── Configuración ──────────────────────────────────────────────
+// Pega aquí el firebaseConfig de tu proyecto (Firebase → Configuración del proyecto → Tus apps).
+const FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyDfFjHVtygzj0wLFj8uH5nwiw61pPGn4XU',
+  authDomain: 'inversiones-as-7bf96.firebaseapp.com',
+  projectId: 'inversiones-as-7bf96',
+  storageBucket: 'inversiones-as-7bf96.firebasestorage.app',
+  messagingSenderId: '344286742128',
+  appId: '1:344286742128:web:e67c4581c6c83e26bd56b5',
+};
+const SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
+// ───────────────────────────────────────────────────────────────
+
+import { porMes, cuadre, proyeccion, tasaMes, sumarMeses, metros, proximaFecha, ym, leerValor } from './calculos.js';
+
+const CATEGORIAS = {
+  gasto: ['Crédito hipotecario', 'Administración', 'Servicios', 'Impuestos', 'Mantenimiento y arreglos', 'Mejoras y dotación', 'Cuota extraordinaria', 'Gestión arriendo', 'Trámites', 'Seguros', 'Abono a capital', 'Ahorro abono extra', 'Compra', 'Otros gastos'],
+  ingreso: ['Arriendo', 'Otros ingresos'],
+  aporte: ['Aporte socios'],
+  ajuste: ['Abono entre socios', 'Cuadre socios'],
+};
+const TIPOS = { gasto: 'Gasto', ingreso: 'Ingreso', aporte: 'Aporte de socios', ajuste: 'Abono entre socios' };
+const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const hoy = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+const mesTxt = (k, largo) => `${largo ? ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][+k.slice(5, 7) - 1] : MES[+k.slice(5, 7) - 1]} ${k.slice(0, 4)}`;
+const fechaTxt = (f) => `${+f.slice(8, 10) || ''} ${MES[+f.slice(5, 7) - 1]} ${f.slice(0, 4)}`.trim();
+const nuevoId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const fmts = {};
+function money(n, cur = 'COP') {
+  const f = (fmts[cur] ??= new Intl.NumberFormat('es-CO', { style: 'currency', currency: cur, maximumFractionDigits: cur === 'COP' ? 0 : 2 }));
+  return f.format(n || 0);
+}
+function corto(n) {
+  const a = Math.abs(n);
+  if (a >= 1e6) return `${(n / 1e6).toLocaleString('es-CO', { maximumFractionDigits: a >= 1e8 ? 0 : 1 })} M`;
+  if (a >= 1e3) return `${Math.round(n / 1e3).toLocaleString('es-CO')} mil`;
+  return Math.round(n).toLocaleString('es-CO');
+}
+const pct = (x, d = 1) => `${(x * 100).toLocaleString('es-CO', { maximumFractionDigits: d })} %`;
+
+// ── Estado ────────────────────────────────────────────────────
+const S = { user: null, cargando: true, sinAcceso: false, invs: {}, movs: [], invId: null, tab: 'resumen', f: { anio: '', tipo: '', q: '' }, demo: false, error: '' };
+const inv = () => S.invs[S.invId];
+const cur = () => inv()?.moneda || 'COP';
+try { S.invId = localStorage.getItem('inv'); } catch {}
+
+// ── Datos: Firebase o vista previa en memoria ────────────────
+let api;
+async function conectarFirebase() {
+  const [{ initializeApp }, A, F] = await Promise.all([
+    import(SDK + 'firebase-app.js'), import(SDK + 'firebase-auth.js'), import(SDK + 'firebase-firestore.js')]);
+  const app = initializeApp(FIREBASE_CONFIG), auth = A.getAuth(app), db = F.getFirestore(app);
+  let offMovs = null, offInvs = null;
+  const fallo = (e) => { if (e.code === 'permission-denied') S.sinAcceso = true; else S.error = e.message; S.cargando = false; render(); };
+  api = {
+    entrar: async () => { const p = new A.GoogleAuthProvider(); try { await A.signInWithPopup(auth, p); } catch (e) { if (/popup/.test(e.code)) await A.signInWithRedirect(auth, p); else throw e; } },
+    salir: () => A.signOut(auth),
+    verMovs(id) {
+      offMovs?.();
+      S.movs = [];
+      offMovs = F.onSnapshot(F.collection(db, 'inversiones', id, 'movimientos'), (q) => { S.movs = q.docs.map((d) => d.data()); render(); }, fallo);
+    },
+    guardarInv: (x) => F.setDoc(F.doc(db, 'inversiones', x.id), x),
+    guardarMov: (m) => F.setDoc(F.doc(db, 'inversiones', S.invId, 'movimientos', m.id), m),
+    guardarMovs: async (ms) => { const b = F.writeBatch(db); ms.forEach((m) => b.set(F.doc(db, 'inversiones', S.invId, 'movimientos', m.id), m)); await b.commit(); },
+    borrarMov: (id) => F.deleteDoc(F.doc(db, 'inversiones', S.invId, 'movimientos', id)),
+    async importar({ inversion, movimientos }) {
+      await F.setDoc(F.doc(db, 'inversiones', inversion.id), inversion);
+      for (let k = 0; k < movimientos.length; k += 400) {
+        const b = F.writeBatch(db);
+        movimientos.slice(k, k + 400).forEach((m) => b.set(F.doc(db, 'inversiones', inversion.id, 'movimientos', m.id), m));
+        await b.commit();
+      }
+    },
+  };
+  A.onAuthStateChanged(auth, (u) => {
+    S.user = u; S.sinAcceso = false; offInvs?.(); offMovs?.();
+    if (!u) { S.cargando = false; return render(); }
+    S.cargando = true; render();
+    offInvs = F.onSnapshot(F.collection(db, 'inversiones'), (q) => {
+      S.invs = Object.fromEntries(q.docs.map((d) => [d.id, d.data()]));
+      S.cargando = false;
+      elegirInv();
+      render();
+    }, fallo);
+  });
+}
+function vistaPrevia(seed) {
+  S.demo = true; S.user = { email: 'vista previa' }; S.cargando = false;
+  const movs = {};
+  const emitir = () => { S.movs = [...(movs[S.invId] || [])]; render(); };
+  api = {
+    entrar() {}, salir() {},
+    verMovs: emitir,
+    guardarInv: async (x) => { S.invs[x.id] = structuredClone(x); render(); },
+    guardarMov: async (m) => { const l = (movs[S.invId] ??= []); const k = l.findIndex((x) => x.id === m.id); k < 0 ? l.push(m) : (l[k] = m); emitir(); },
+    guardarMovs: async (ms) => { for (const m of ms) await api.guardarMov(m); },
+    borrarMov: async (id) => { movs[S.invId] = movs[S.invId].filter((x) => x.id !== id); emitir(); },
+    importar: async ({ inversion, movimientos }) => { S.invs[inversion.id] = inversion; movs[inversion.id] = movimientos; elegirInv(inversion.id); },
+  };
+  api.importar(seed);
+}
+function elegirInv(id) {
+  const ids = Object.keys(S.invs);
+  const nuevo = id || (S.invs[S.invId] ? S.invId : ids[0]);
+  if (!nuevo) { S.invId = null; S.movs = []; return; }
+  if (nuevo !== S.invId || !S.movs.length) { S.invId = nuevo; try { localStorage.setItem('inv', nuevo); } catch {} api.verMovs(nuevo); }
+}
+
+let yaAnimo = false;
+// ── Vistas ────────────────────────────────────────────────────
+const TABS = [['resumen', 'Resumen'], ['movimientos', 'Movimientos'], ['credito', 'Crédito'], ['socios', 'Socios'], ['agenda', 'Agenda'], ['inversion', 'Datos']];
+
+function render() {
+  const el = $('#app');
+  if (S.cargando) { el.innerHTML = `<div class="login"><p class="suave">Cargando…</p></div>`; return; }
+  if (!api) { el.innerHTML = `<div class="login"><div class="c"><div class="marca">Inversiones AS</div><p class="alerta" style="margin-top:16px">${esc(S.error)}</p></div></div>`; return; }
+  if (!S.user) { el.innerHTML = vistaLogin(); return; }
+  if (S.sinAcceso) {
+    el.innerHTML = `<div class="login"><div class="c"><div class="marca">Inversiones AS</div><h2 class="disp" style="margin:18px 0 8px">Esta cuenta no tiene acceso</h2><p class="suave">Entraste como ${esc(S.user.email)}. Solo los socios autorizados pueden ver estas inversiones.</p><button class="btn" data-act="salir">Cerrar sesión</button></div></div>`;
+    return;
+  }
+  const i = inv();
+  const nav = TABS.map(([k, t]) => `<button data-tab="${k}" ${S.tab === k ? 'aria-current="page"' : ''}>${t}</button>`).join('');
+  const sel = Object.keys(S.invs).length > 1
+    ? `<select class="inv" data-act="inv" aria-label="Inversión">${Object.values(S.invs).map((x) => `<option value="${esc(x.id)}" ${x.id === S.invId ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select>` : '';
+  el.innerHTML = `<div class="app">
+    <aside class="lado"><div class="marca">Inversiones AS<small>Alejo & Sebas</small></div>
+      ${i ? `<nav class="nav" aria-label="Secciones">${nav}</nav>` : ''}
+      <div class="pie">${S.demo ? 'Vista previa · los cambios no se guardan' : esc(S.user.email)}<br>${S.demo ? '' : '<a href="#" data-act="salir">Cerrar sesión</a>'}</div></aside>
+    <main>${i ? `<div class="cab"><div><h1>${esc(i.nombre)}</h1><div class="lugar">${esc([i.detalle, i.ubicacion].filter(Boolean).join(' · '))}</div></div>
+      <div style="display:flex;gap:8px;align-items:center">${sel}<button class="btn sm" data-act="nuevaInv">+ Inversión</button></div></div>
+      ${S.error ? `<p class="alerta">${esc(S.error)}</p>` : ''}${VISTAS[S.tab](i)}` : vistaVacia()}</main>
+    ${i ? '<button class="mas" data-act="menuMas" aria-label="Registrar">+</button>' : ''}</div>`;
+}
+
+function vistaLogin() {
+  return `<div class="login"><div class="c">
+    <div class="marca">Inversiones AS</div>
+    <div class="planta" aria-hidden="true">${'<i class="banco"></i>'.repeat(10)}${'<i class="alejo"></i>'.repeat(12)}${'<i class="sebas"></i>'.repeat(12)}</div>
+    <p class="suave" style="margin-top:0">Las inversiones de Alejo y Sebas. Entra con tu cuenta de Google autorizada.</p>
+    <button class="btn pri" data-act="entrar" style="width:100%">Entrar con Google</button></div></div>`;
+}
+
+function vistaVacia() {
+  return `<div class="c vacio"><h2 class="disp" style="font-size:24px;margin:0 0 8px">Aún no hay inversiones</h2>
+    <p class="suave">Importa el historial del apto (archivo <b>historial.json</b>) o crea una inversión desde cero.</p>
+    <p style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><label class="btn pri" style="flex-direction:row;color:var(--papel)">Importar historial<input type="file" accept="application/json" data-act="importar" hidden></label>
+    <button class="btn" data-act="nuevaInv">Crear inversión</button></p></div>`;
+}
+
+const VISTAS = {
+  resumen(i) {
+    const c = i.moneda, valor = i.valorEstimado || i.precioCompra, saldo = i.credito?.saldo || 0;
+    const q = cuadre(i.socios, S.movs);
+    const meses = porMes(S.movs), keys = Object.keys(meses).sort(), ult = keys.slice(-12);
+    const renta = ult.reduce((a, k) => a + meses[k].arriendo, 0), opex = ult.reduce((a, k) => a + meses[k].opex, 0);
+    const bolsillo = ult.reduce((a, k) => a + meses[k].aporte, 0) / (ult.length || 1);
+    const patrimonio = valor - saldo;
+    let firma = '';
+    if (i.area && valor) {
+      const m = metros(i.area, valor, saldo, i.socios);
+      let k = 0; const celda = (cls) => `<i class="${cls}" style="animation-delay:${(k++) * 14}ms"></i>`; const quieta = yaAnimo ? ' quieta' : ''; yaAnimo = true;
+      const celdas = m.cuotas.map((x) => Array.from({ length: x.n }, () => celda(x.id)).join('')).join('') + Array.from({ length: m.banco }, () => celda('banco')).join('');
+      firma = `<section class="c s12 m2" aria-label="Metros cuadrados propios">
+        <h3><b class="num">${m.propios}</b> de ${i.area} m² ya son de ustedes</h3>
+        <div class="cota" aria-hidden="true"><span>${i.area} M²</span></div>
+        <div class="planta${quieta}" role="img" aria-label="${m.propios} metros propios y ${m.banco} del banco">${celdas}</div>
+        <div class="leyenda">${i.socios.map((s) => `<span style="--k:var(--${esc(s.id)},var(--alejo))">${esc(s.nombre)} · ${s.pct}%</span>`).join('')}<span style="--k:var(--banco)">Banco · ${m.banco} m²</span></div>
+        <div class="cifras">
+          <div><span class="eti">Vale hoy (estimado)</span><b>${corto(valor)}</b></div>
+          <div><span class="eti">Debemos al banco</span><b>${corto(saldo)}</b></div>
+          <div><span class="eti">Patrimonio de los dos</span><b>${corto(patrimonio)}</b></div>
+          <div><span class="eti">Plusvalía vs compra</span><b class="${valor >= i.precioCompra ? 'entra' : 'sale'}">${pct(valor / i.precioCompra - 1, 0)}</b></div>
+        </div></section>`;
+    }
+    const k = ym(hoy()), m = meses[k];
+    const fijos = (i.fijos || []).reduce((a, f) => a + (f.tipo === 'ingreso' ? -f.valor : f.valor), 0) + (i.compromisos || []).filter((x) => x.pagadas < x.cuotas).reduce((a, x) => a + x.valorCuota, 0);
+    const deudor = q.socios.filter((s) => s.dif < -1).sort((a, b) => a.dif - b.dif)[0], acreedor = q.socios.filter((s) => s.dif > 1).sort((a, b) => b.dif - a.dif)[0];
+    const prox = agenda(i).slice(0, 4);
+    return `<div class="rejilla">${firma}
+      <section class="c s5"><h2>${mesTxt(k, true)} ${m?.n ? '<span class="chip">registrado</span>' : '<span class="chip" style="color:var(--aviso)">pendiente</span>'}</h2>
+        ${m?.n ? `<div class="fila"><span>Ingresos</span><b class="num entra">${money(m.ingresos, c)}</b></div>
+          <div class="fila"><span>Gastos</span><b class="num sale">${money(m.gastos, c)}</b></div>
+          <div class="fila"><span>Pusieron entre los dos</span><b class="num">${money(m.aporte, c)}</b></div>`
+        : `<p class="suave" style="margin-top:0">Con los pagos fijos, este mes les toca poner cerca de <b class="num">${money(Math.max(fijos, 0), c)}</b> entre los dos.</p>`}
+        <p style="margin:14px 0 0"><button class="btn ${m?.n ? '' : 'pri'}" data-act="registrarMes">${m?.n ? 'Registrar otro mes' : 'Registrar este mes'}</button></p></section>
+      <section class="c s7"><h2>Cuadre entre socios <a href="#" data-tab="socios" class="eti">ver detalle</a></h2>
+        ${deudor && acreedor ? `<div class="big num">${money(-deudor.dif, c)}</div><p class="suave" style="margin:6px 0 14px">le falta poner a <b style="color:var(--${esc(deudor.id)})">${esc(deudor.nombre)}</b> para quedar ${deudor.pct}/${acreedor.pct} con ${esc(acreedor.nombre)}</p>`
+        : `<div class="big">Están al día</div><p class="suave">Cada uno ha puesto lo que le toca.</p>`}
+        <div class="barra" aria-hidden="true">${q.socios.map((s) => `<i style="width:${(s.puesto / q.total) * 100}%;background:var(--${esc(s.id)},var(--alejo))"></i>`).join('')}</div>
+        <div class="leyenda">${q.socios.map((s) => `<span style="--k:var(--${esc(s.id)},var(--alejo))">${esc(s.nombre)} ha puesto ${corto(s.puesto)} (${pct(s.puesto / q.total, 0)})</span>`).join('')}</div></section>
+      <section class="c s8 graf"><h2>Flujo mensual · arriendo menos gastos</h2>${grafFlujo(meses, keys.slice(-24), c)}
+        <p class="suave" style="margin:10px 0 0;font-size:14px">En los últimos 12 meses pusieron en promedio <b class="num">${money(bolsillo, c)}</b> al mes entre los dos.</p></section>
+      <section class="c s4"><h2>Rentabilidad <span class="eti">12 meses</span></h2>
+        <div class="fila"><span>Arriendo del año</span><b class="num">${corto(renta)}</b></div>
+        <div class="fila"><span title="Arriendo anual / precio de compra">Bruta</span><b class="num">${pct(renta / i.precioCompra)}</b></div>
+        <div class="fila"><span title="Arriendo menos administración, impuestos, servicios y arreglos / precio de compra">Neta (sin crédito)</span><b class="num">${pct((renta - opex) / i.precioCompra)}</b></div>
+        <div class="fila"><span>Han puesto en total</span><b class="num">${corto(q.total)}</b></div>
+        <div class="fila"><span>Ganancia si vendieran hoy</span><b class="num ${patrimonio - q.total >= 0 ? 'entra' : 'sale'}">${corto(patrimonio - q.total)}</b></div>
+        <p class="suave" style="font-size:12.5px;margin:8px 0 0">La ganancia usa el valor estimado y no descuenta costos de venta.</p></section>
+      <section class="c s12"><h2>Próximo <a href="#" data-tab="agenda" class="eti">ver agenda</a></h2>${prox.map(filaAgenda).join('') || '<p class="suave">Nada pendiente.</p>'}</section>
+    </div>`;
+  },
+
+  movimientos(i) {
+    const c = i.moneda, { anio, tipo, q } = S.f, t = q.trim().toLowerCase();
+    const anios = [...new Set(S.movs.map((m) => m.fecha.slice(0, 4)))].sort().reverse();
+    const lista = S.movs.filter((m) => (!anio || m.fecha.startsWith(anio)) && (!tipo || m.tipo === tipo)
+      && (!t || `${m.concepto} ${m.categoria} ${m.nota}`.toLowerCase().includes(t)))
+      .sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id.localeCompare(a.id));
+    const grupos = {};
+    lista.forEach((m) => (grupos[ym(m.fecha)] ??= []).push(m));
+    const cats = {};
+    lista.filter((m) => m.tipo === 'gasto' && m.categoria !== 'Compra').forEach((m) => (cats[m.categoria] = (cats[m.categoria] || 0) + m.valor));
+    const top = Object.entries(cats).sort((a, b) => b[1] - a[1]), max = top[0]?.[1] || 1;
+    return `<div class="filtros">
+        <input type="search" placeholder="Buscar concepto, categoría o nota" value="${esc(q)}" data-f="q" aria-label="Buscar">
+        <select data-f="anio" aria-label="Año"><option value="">Todos los años</option>${anios.map((a) => `<option ${a === anio ? 'selected' : ''}>${a}</option>`).join('')}</select>
+        <select data-f="tipo" aria-label="Tipo"><option value="">Todo</option>${Object.entries(TIPOS).map(([k, v]) => `<option value="${k}" ${k === tipo ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+      <div class="rejilla"><div class="s8">${Object.entries(grupos).map(([k, ms]) => {
+        const ing = ms.filter((m) => m.tipo === 'ingreso').reduce((a, m) => a + m.valor, 0), gas = ms.filter((m) => m.tipo === 'gasto').reduce((a, m) => a + m.valor, 0);
+        return `<section class="mesg"><header><b>${mesTxt(k, true)}</b><span class="suave num" style="font-size:13px">${ing ? `<span class="entra">+${corto(ing)}</span> · ` : ''}<span class="sale">−${corto(gas)}</span></span></header>
+          <div class="lista">${ms.map((m) => filaMov(m, c, i)).join('')}</div></section>`;
+      }).join('') || '<p class="c suave">No hay movimientos con estos filtros.</p>'}</div>
+      <aside class="s4"><section class="c" style="position:sticky;top:20px"><h2>Gastos por categoría</h2>
+        <div class="cat">${top.map(([k, v]) => `<span>${esc(k)}</span><div class="barra"><i style="width:${(v / max) * 100}%;background:var(--sale);opacity:.75"></i></div><b class="num" style="font-size:13px">${corto(v)}</b>`).join('') || '<span class="suave">Sin gastos</span>'}</div>
+        <p class="suave" style="font-size:12.5px;margin:12px 0 0">Sin la compra (cuota inicial). Cambia con los filtros.</p></section></aside></div>`;
+  },
+
+  credito(i) {
+    const cr = i.credito, c = i.moneda;
+    if (!cr) return `<div class="c vacio"><p>Esta inversión no tiene crédito registrado.</p><button class="btn" data-tab="inversion">Agregar datos del crédito</button></div>`;
+    const base = proyeccion(cr), im = tasaMes(cr.tasaEA), int = cr.saldo * im, cap = cr.cuotaSinSubsidio - int;
+    const desde = sumarMeses(ym(cr.saldoFecha), 1), fin = sumarMeses(desde, base.meses - 1);
+    const conSub = cr.proximaCuota <= cr.subsidioHastaCuota, cuotaHoy = cr.cuotaSinSubsidio - (conSub ? cr.subsidio : 0) + cr.seguros;
+    const finSub = sumarMeses(desde, cr.subsidioHastaCuota - cr.proximaCuota);
+    const pagado = cr.monto - cr.saldo;
+    return `<div class="rejilla">
+      <section class="c s7"><h2>Saldo · ${esc(cr.banco)} <span class="eti">extracto ${fechaTxt(cr.saldoFecha)}</span></h2>
+        <div class="big num">${money(cr.saldo, c)}</div>
+        <p class="suave" style="margin:6px 0 14px">Han pagado ${money(pagado, c)} de capital (${pct(pagado / cr.monto)} de ${corto(cr.monto)}).</p>
+        <div class="barra"><i style="width:${(pagado / cr.monto) * 100}%;background:var(--entra)"></i></div>
+        <div class="cifras">
+          <div><span class="eti">Cuota hoy</span><b>${money(cuotaHoy, c)}</b></div>
+          <div><span class="eti">Próxima cuota</span><b>${cr.proximaCuota} de ${cr.plazo}</b></div>
+          <div><span class="eti">Termina</span><b>${mesTxt(fin)}</b></div>
+          <div><span class="eti">Tasa cobrada</span><b>${String(cr.tasaEA).replace('.', ',')}% EA</b></div>
+        </div>
+        <p style="margin:16px 0 0"><button class="btn sm" data-tab="inversion">Actualizar con un extracto nuevo</button></p></section>
+      <section class="c s5"><h2>Cómo se va la cuota</h2>
+        <div class="fila"><span>Intereses</span><b class="num sale">${money(int, c)}</b></div>
+        <div class="fila"><span>Capital (lo que baja la deuda)</span><b class="num entra">${money(cap, c)}</b></div>
+        <div class="fila"><span>Seguros</span><b class="num">${money(cr.seguros, c)}</b></div>
+        ${conSub ? `<div class="fila"><span>Subsidio del Gobierno</span><b class="num entra">−${money(cr.subsidio, c)}</b></div>` : ''}
+        <div class="fila"><b>Pagan</b><b class="num">${money(cuotaHoy, c)}</b></div>
+        <p class="suave" style="font-size:13px;margin:10px 0 0">De cada peso de la cuota, ${Math.round((int / cr.cuotaSinSubsidio) * 100)} centavos son intereses.</p></section>
+      ${conSub ? `<div class="s12 alerta">El subsidio de ${money(cr.subsidio, c)} va hasta la cuota ${cr.subsidioHastaCuota} (${mesTxt(finSub)}). Desde ${mesTxt(sumarMeses(finSub, 1))} la cuota sube a cerca de <b>${money(cr.cuotaSinSubsidio + cr.seguros, c)}</b>.</div>` : ''}
+      <section class="c s12"><h2>¿Y si abonamos a capital?</h2>
+        <form class="dos" data-act="simular" onsubmit="return false">
+          <label>Abono único hoy<input inputmode="numeric" name="u" placeholder="10.000.000"></label>
+          <label>Abono extra cada mes<input inputmode="numeric" name="m" placeholder="200.000"></label></form>
+        <div id="sim" style="margin-top:14px">${simular(cr, c, 0, 0, base, desde)}</div>
+        <p class="suave" style="font-size:12.5px;margin:10px 0 0">Calculado con ${String(cr.tasaEA).replace('.', ',')}% EA y cuota constante; al abonar, pidan al banco reducir plazo. Es una proyección: el extracto manda.</p></section>
+    </div>`;
+  },
+
+  socios(i) {
+    const c = i.moneda, esCompra = (m) => m.categoria === 'Compra' || (m.categoria === 'Trámites' && m.fecha < (i.credito?.desembolso || '9999'));
+    const q = cuadre(i.socios, S.movs), qc = cuadre(i.socios, S.movs.filter(esCompra));
+    const abonos = S.movs.filter((m) => m.tipo === 'ajuste').sort((a, b) => b.fecha.localeCompare(a.fecha));
+    const deudor = q.socios.filter((s) => s.dif < -1).sort((a, b) => a.dif - b.dif)[0];
+    return `<div class="rejilla">${q.socios.map((s) => {
+        const sc = qc.socios.find((x) => x.id === s.id);
+        return `<section class="c s6" style="border-top:4px solid var(--${esc(s.id)},var(--alejo))"><h2>${esc(s.nombre)} <span class="eti">${s.pct}% del apto</span></h2>
+          <div class="big num">${money(s.puesto, c)}</div><p class="suave" style="margin:6px 0 12px">puesto en total · ${pct(s.puesto / q.total)} de todo lo aportado</p>
+          <div class="fila"><span>En la compra (cuota inicial y escrituración)</span><b class="num">${money(sc.puesto, c)}</b></div>
+          <div class="fila"><span>Desde la entrega</span><b class="num">${money(s.puesto - sc.puesto, c)}</b></div>
+          <div class="fila"><span>${s.dif >= 0 ? 'Ha puesto de más' : 'Le falta para su %'}</span><b class="num ${s.dif >= 0 ? 'entra' : 'sale'}">${money(Math.abs(s.dif), c)}</b></div></section>`;
+      }).join('')}
+      <section class="c s12"><h2>Abonos y cuadres <button class="btn sm" data-act="abono">Registrar abono</button></h2>
+        ${deudor ? `<p class="suave" style="margin-top:0">Cada abono de ${esc(deudor.nombre)} baja la diferencia. Cuando llegue a cero, quedan ${i.socios.map((s) => s.pct).join('/')}.</p>` : ''}
+        <div>${abonos.map((m) => `<div class="fila" data-mov="${esc(m.id)}" style="cursor:pointer"><span>${esc(m.concepto)}<br><small class="suave">${fechaTxt(m.fecha)}${m.nota ? ' · ' + esc(m.nota) : ''}</small></span><b class="num">${corto(m.valor)}</b></div>`).join('') || '<p class="suave">Aún no hay abonos.</p>'}</div></section></div>`;
+  },
+
+  agenda(i) {
+    const comp = (i.compromisos || []).map((x) => `<div class="fila"><span><b>${esc(x.nombre)}</b> <span class="chip">${x.pagadas} de ${x.cuotas}</span><br><small class="suave">${money(x.valorCuota, i.moneda)} al mes · ${esc(x.medio || '')} · termina ${mesTxt(sumarMeses(x.inicio, x.cuotas - 1))}</small></span>
+      <span style="text-align:right"><b class="num">${corto((x.cuotas - x.pagadas) * x.valorCuota)}</b><br><small class="suave">por pagar</small></span></div>
+      <div class="barra" style="margin-bottom:10px"><i style="width:${(x.pagadas / x.cuotas) * 100}%;background:var(--alejo)"></i></div>`).join('');
+    return `<div class="rejilla">
+      <section class="c s7"><h2>Recordatorios <button class="btn sm" data-act="recordatorio">Agregar</button></h2>${agenda(i).map(filaAgenda).join('')}</section>
+      <section class="c s5"><h2>Pagos a cuotas</h2>${comp || '<p class="suave">Nada a cuotas.</p>'}
+        ${i.contrato ? `<h2 style="margin-top:22px">Contrato de arriendo</h2>
+          <div class="fila"><span>Canon</span><b class="num">${money(i.contrato.canon, i.moneda)}</b></div>
+          <div class="fila"><span>Vigencia</span><b>${fechaTxt(i.contrato.inicio)} → ${mesTxt(sumarMeses(ym(i.contrato.inicio), i.contrato.meses - 1))}</b></div>
+          <div class="fila"><span>Pago</span><b>días ${esc(i.contrato.diaPago)}</b></div>
+          <div class="fila"><span>Depósito</span><b>${i.contrato.deposito ? money(i.contrato.deposito, i.moneda) : 'Sin depósito'}</b></div>
+          <div class="fila"><span>Modalidad</span><b>${esc(i.contrato.modalidad)}</b></div>` : ''}</section></div>`;
+  },
+
+  inversion(i) {
+    return `<div class="rejilla"><section class="c s8"><h2>Datos de la inversión</h2>
+      <form data-act="datos" style="display:flex;flex-direction:column;gap:14px">${CAMPOS.map(([g, campos]) => `<fieldset style="border:0;padding:0;margin:0 0 6px"><legend class="eti" style="margin-bottom:8px">${g}</legend><div class="dos">
+        ${campos.filter(([p]) => p.startsWith('credito.') ? i.credito : p.startsWith('contrato.') ? i.contrato : true).map(([p, t, tipo]) => `<label>${t}<input name="${p}" ${tipo === 'n' ? 'inputmode="decimal"' : tipo === 'f' ? 'type="date"' : ''} value="${esc(tipo === 'n' ? fmtN(leer(i, p)) : leer(i, p) ?? '')}"></label>`).join('')}</div></fieldset>`).join('')}
+        ${i.socios.map((s, k) => `<div class="dos"><label>Socio ${k + 1}<input name="socio.${k}.nombre" value="${esc(s.nombre)}"></label><label>% de participación<input name="socio.${k}.pct" inputmode="decimal" value="${s.pct}"></label></div>`).join('')}
+        ${(i.fijos || []).map((f, k) => `<label>Valor fijo · ${esc(f.concepto)}<input name="fijo.${k}" inputmode="numeric" value="${fmtN(f.valor)}"></label>`).join('')}
+        <div class="acc"><span></span><div>${i.credito ? '' : '<button class="btn" type="button" data-act="addCredito">Agregar crédito</button>'}${i.contrato ? '' : '<button class="btn" type="button" data-act="addContrato">Agregar contrato</button>'}<button class="btn pri">Guardar cambios</button></div></div></form></section>
+      <section class="c s4"><h2>Respaldo</h2><p class="suave" style="margin-top:0">Descarga todo (datos y movimientos) en un archivo. Hazlo de vez en cuando.</p>
+        <button class="btn" data-act="exportar">Descargar respaldo</button>
+        <h2 style="margin-top:24px">Importar</h2><p class="suave" style="margin-top:0">Carga un archivo de historial o un respaldo.</p>
+        <label class="btn" style="flex-direction:row;color:var(--tinta);display:inline-flex">Elegir archivo<input type="file" accept="application/json" data-act="importar" hidden></label></section></div>`;
+  },
+};
+
+const CAMPOS = [
+  ['General', [['nombre', 'Nombre'], ['detalle', 'Detalle (torre, apto)'], ['ubicacion', 'Ubicación'], ['moneda', 'Moneda (COP, USD…)'], ['area', 'Área m²', 'n'], ['precioCompra', 'Precio de compra', 'n'], ['valorEstimado', 'Valor estimado hoy', 'n']]],
+  ['Crédito (del último extracto)', [['credito.banco', 'Banco'], ['credito.saldo', 'Saldo', 'n'], ['credito.saldoFecha', 'Fecha del extracto', 'f'], ['credito.proximaCuota', 'Número de la próxima cuota', 'n'], ['credito.plazo', 'Plazo en meses', 'n'], ['credito.tasaEA', 'Tasa cobrada % EA', 'n'], ['credito.cuotaSinSubsidio', 'Cuota sin subsidio ni seguros', 'n'], ['credito.subsidio', 'Subsidio mensual', 'n'], ['credito.subsidioHastaCuota', 'Subsidio hasta la cuota #', 'n'], ['credito.seguros', 'Seguros al mes', 'n'], ['credito.monto', 'Monto desembolsado', 'n'], ['credito.desembolso', 'Fecha de desembolso', 'f']]],
+  ['Contrato de arriendo', [['contrato.canon', 'Canon mensual', 'n'], ['contrato.inicio', 'Inicio', 'f'], ['contrato.meses', 'Duración (meses)', 'n'], ['contrato.diaPago', 'Días de pago'], ['contrato.deposito', 'Depósito', 'n'], ['contrato.modalidad', 'Modalidad']]],
+];
+const leer = (o, p) => p.split('.').reduce((a, k) => a?.[k], o);
+const fmtN = (n) => (n || n === 0 ? Number(n).toLocaleString('es-CO', { maximumFractionDigits: 2 }) : '');
+function poner(o, p, v) { const ks = p.split('.'); ks.slice(0, -1).reduce((a, k) => (a[k] ??= {}), o)[ks.at(-1)] = v; }
+
+function filaMov(m, c, i) {
+  const signo = m.tipo === 'ingreso' ? '+' : m.tipo === 'gasto' ? '−' : '';
+  const chips = Object.entries(m.aportes || {}).filter(([, v]) => v).map(([k, v]) => `<span class="chip ${esc(k)}">${esc(i.socios.find((s) => s.id === k)?.nombre || k)} ${corto(v)}</span>`).join('');
+  return `<div class="mov" data-mov="${esc(m.id)}" tabindex="0" role="button"><span>${esc(m.concepto)}</span>
+    <span class="val ${m.tipo === 'ingreso' ? 'entra' : m.tipo === 'gasto' ? '' : 'suave'}">${signo}${money(m.valor, c)}</span>
+    <small>${fechaTxt(m.fecha)} · ${esc(m.categoria)}${m.nota ? ` · ${esc(m.nota.length > 60 ? m.nota.slice(0, 60) + '…' : m.nota)}` : ''}</small><small style="justify-content:flex-end">${chips}</small></div>`;
+}
+
+function grafFlujo(meses, keys, c) {
+  if (!keys.length) return '<p class="suave">Sin datos.</p>';
+  const vals = keys.map((k) => meses[k].ingresos - meses[k].gastos);
+  const W = 640, H = 200, alto = Math.max(...vals, 0), bajo = Math.min(...vals, 0), k1 = (H - 10) / (alto - bajo || 1), z = 5 + alto * k1;
+  const bw = W / keys.length;
+  const barras = keys.map((k, n) => {
+    const v = vals[n], h = Math.max(Math.abs(v) * k1, 1.5);
+    return `<rect x="${n * bw + 2}" y="${v >= 0 ? z - h : z}" width="${bw - 4}" height="${h}" rx="2" fill="var(${v >= 0 ? '--entra' : '--sale'})" opacity="${k === ym(hoy()) ? 1 : 0.78}"><title>${mesTxt(k)}: ${money(v, c)}</title></rect>
+      ${k.endsWith('-01') || n === 0 ? `<text x="${n * bw + 2}" y="${H + 14}" font-size="11" fill="var(--suave)" font-family="Public Sans">${k.slice(0, 4)}</text>` : ''}`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H + 20}" role="img" aria-label="Flujo de los últimos ${keys.length} meses">
+    ${barras}<line x1="0" x2="${W}" y1="${z}" y2="${z}" stroke="var(--suave)" stroke-width="1"/>
+    <text x="${W}" y="${z - 4}" text-anchor="end" font-size="11" fill="var(--suave)" font-family="Public Sans">0</text></svg>`;
+}
+
+function simular(cr, c, u, mm, base, desde) {
+  const r = proyeccion(cr, u, mm);
+  if (!u && !mm) return `<p style="margin:0">Hoy terminan de pagar en <b>${mesTxt(sumarMeses(desde, base.meses - 1))}</b> y faltan unos <b class="num">${money(base.intereses, c)}</b> en intereses.</p>`;
+  return `<div class="cifras" style="margin:0;padding:0;border:0">
+    <div><span class="eti">Terminan en</span><b>${mesTxt(sumarMeses(desde, r.meses - 1))}</b></div>
+    <div><span class="eti">Meses menos</span><b class="entra">${base.meses - r.meses}</b></div>
+    <div><span class="eti">Ahorran en intereses</span><b class="entra">${corto(base.intereses - r.intereses)}</b></div></div>`;
+}
+
+function agenda(i) {
+  const h = hoy(), l = (i.recordatorios || []).map((r) => ({ ...r, prox: proximaFecha(r, h) }));
+  const mesSig = (d) => { const f = `${h.slice(0, 8)}${String(d).padStart(2, '0')}`; return f >= h ? f : sumarMeses(h.slice(0, 7), 1) + '-' + String(d).padStart(2, '0'); };
+  if (i.credito) l.push({ id: '_cuota', auto: true, titulo: `Pagar cuota del crédito (${i.credito.banco})`, prox: mesSig(i.credito.diaPago || 10), repite: 'mensual' });
+  if (i.contrato) l.push({ id: '_arriendo', auto: true, titulo: `Llega el arriendo (días ${i.contrato.diaPago})`, prox: mesSig(parseInt(i.contrato.diaPago) || 5), repite: 'mensual' });
+  return l.sort((a, b) => a.prox.localeCompare(b.prox));
+}
+function filaAgenda(r) {
+  const dias = Math.round((new Date(r.prox) - new Date(hoy())) / 864e5);
+  const cls = dias < 0 ? 'vencido' : dias <= 30 ? 'pronto' : '';
+  const cuando = dias < 0 ? `hace ${-dias} días` : dias === 0 ? 'hoy' : dias === 1 ? 'mañana' : dias <= 60 ? `en ${dias} días` : mesTxt(r.prox);
+  return `<div class="rec"><div class="dia ${cls}"><b>${+r.prox.slice(8, 10)}</b><span>${MES[+r.prox.slice(5, 7) - 1]} ${r.prox.slice(2, 4)}</span></div>
+    <div><b>${esc(r.titulo)}</b><br><small class="suave">${cuando}${r.repite !== 'no' ? ` · cada ${r.repite === 'anual' ? 'año' : 'mes'}` : ''}${r.nota ? ' · ' + esc(r.nota) : ''}</small></div>
+    ${r.auto ? '' : `<div style="display:flex;gap:6px"><button class="btn sm" data-act="hecho" data-id="${esc(r.id)}">Hecho</button><button class="btn sm" data-act="recordatorio" data-id="${esc(r.id)}" aria-label="Editar">Editar</button></div>`}</div>`;
+}
+
+// ── Formularios ───────────────────────────────────────────────
+const dlg = $('#dlg');
+function abrir(html, alEnviar) {
+  dlg.innerHTML = html;
+  const f = $('form', dlg);
+  f.onsubmit = async (e) => {
+    e.preventDefault();
+    const b = $('button.pri', f); b.disabled = true;
+    try { await alEnviar(new FormData(f), f, e.submitter); dlg.close(); }
+    catch (err) { b.disabled = false; alert(`No se pudo guardar: ${err.message}`); }
+  };
+  dlg.showModal();
+  $('input:not([type=hidden]):not([type=checkbox]):not([type=radio]),select', f)?.focus();
+}
+const cerrarBtn = '<button type="button" class="btn" data-act="cerrar">Cancelar</button>';
+
+function formMov(m) {
+  const i = inv(), c = i.moneda, nuevo = !m.id;
+  m = { tipo: 'gasto', fecha: hoy(), concepto: '', categoria: '', valor: '', nota: '', aportes: {}, ...m };
+  const esAbono = m.tipo === 'ajuste' && m.categoria !== 'Cuadre socios';
+  const de = esAbono ? Object.entries(m.aportes).find(([, v]) => v > 0)?.[0] : null, para = esAbono ? Object.entries(m.aportes).find(([, v]) => v < 0)?.[0] : null;
+  abrir(`<form>
+    <h2>${nuevo ? (esAbono ? 'Abono entre socios' : 'Nuevo movimiento') : 'Editar movimiento'}</h2>
+    ${m.tipo === 'ajuste' ? '<input type="hidden" name="tipo" value="ajuste">' : `<div class="segm" role="radiogroup" aria-label="Tipo">${['gasto', 'ingreso', 'aporte'].map((k) => `<label><input type="radio" name="tipo" value="${k}" ${m.tipo === k ? 'checked' : ''}>${TIPOS[k]}</label>`).join('')}</div>`}
+    <div class="dos"><label>Fecha<input type="date" name="fecha" value="${esc(m.fecha)}" required></label>
+      <label>Valor<input name="valor" inputmode="decimal" required value="${esc(fmtN(m.valor))}" placeholder="0"></label></div>
+    <label>Concepto<input name="concepto" required value="${esc(m.concepto)}" placeholder="${esAbono ? 'Abono para igualar' : 'Ej. Arreglo de la ducha'}"></label>
+    ${esAbono ? `<div class="dos"><label>Quién paga<select name="de">${i.socios.map((s) => `<option value="${esc(s.id)}" ${s.id === de ? 'selected' : ''}>${esc(s.nombre)}</option>`).join('')}</select></label>
+      <label>A quién<select name="para">${i.socios.map((s, k) => `<option value="${esc(s.id)}" ${s.id === para || (!para && k === 1) ? 'selected' : ''}>${esc(s.nombre)}</option>`).join('')}</select></label></div>
+      <input type="hidden" name="categoria" value="${esc(m.categoria || 'Abono entre socios')}">`
+    : `<label>Categoría<input name="categoria" list="cats" value="${esc(m.categoria)}" placeholder="Elige o escribe una"></label>
+      <datalist id="cats">${Object.values(CATEGORIAS).flat().map((x) => `<option value="${esc(x)}">`).join('')}</datalist>
+      <fieldset style="border:1px solid var(--linea);border-radius:12px;padding:12px 14px;margin:0"><legend class="eti">¿Quién puso el dinero?</legend>
+        <p class="suave" style="font-size:13px;margin:0 0 10px">Déjalo en 0 si salió del arriendo o de lo que ya pusieron en el mes.</p>
+        <div class="segm" style="margin-bottom:10px"><button type="button" class="btn sm" data-reparto="mitad">Mitad y mitad</button>${i.socios.map((s) => `<button type="button" class="btn sm" data-reparto="${esc(s.id)}">Todo ${esc(s.nombre)}</button>`).join('')}<button type="button" class="btn sm" data-reparto="0">Del arriendo</button></div>
+        <div class="dos">${i.socios.map((s) => `<label>${esc(s.nombre)}<input name="ap.${esc(s.id)}" inputmode="decimal" value="${esc(fmtN(m.aportes[s.id] || 0))}"></label>`).join('')}</div></fieldset>`}
+    <label>Nota<textarea name="nota" rows="2" placeholder="Opcional">${esc(m.nota)}</textarea></label>
+    <div class="acc">${nuevo ? '<span></span>' : '<button type="button" class="btn peli" data-act="borrarMov">Borrar</button>'}<div>${cerrarBtn}<button class="btn pri">${nuevo ? 'Guardar' : 'Guardar cambios'}</button></div></div></form>`,
+  async (fd) => {
+    const valor = leerValor(fd.get('valor'), c), tipo = fd.get('tipo');
+    if (valor <= 0) throw new Error('El valor debe ser mayor a 0.');
+    let aportes = {};
+    if (esAbono) {
+      if (fd.get('de') === fd.get('para')) throw new Error('Quién paga y a quién deben ser socios distintos.');
+      aportes = { [fd.get('de')]: valor, [fd.get('para')]: -valor };
+    } else i.socios.forEach((s) => { const v = leerValor(fd.get('ap.' + s.id), c); if (v) aportes[s.id] = v; });
+    if (tipo === 'aporte' && !Object.keys(aportes).length) throw new Error('Indica cuánto puso cada socio.');
+    await api.guardarMov({ ...m, id: m.id || nuevoId(), tipo, fecha: fd.get('fecha'), valor, concepto: fd.get('concepto').trim(),
+      categoria: (fd.get('categoria') || '').trim() || (CATEGORIAS[tipo]?.at(-1) ?? 'Otros'), nota: fd.get('nota').trim(), aportes });
+  });
+  const f = $('form', dlg);
+  f.addEventListener('click', (e) => {
+    const r = e.target.dataset.reparto;
+    if (r === undefined) return;
+    const v = leerValor(f.valor.value, c);
+    i.socios.forEach((s) => (f['ap.' + s.id].value = fmtN(r === 'mitad' ? Math.round((v * s.pct) / 100) : r === s.id ? v : 0)));
+  });
+  $('[data-act=borrarMov]', f)?.addEventListener('click', async () => {
+    if (!confirm(`¿Borrar "${m.concepto}"? No se puede deshacer.`)) return;
+    await api.borrarMov(m.id); dlg.close();
+  });
+}
+
+function formMes() {
+  const i = inv(), c = i.moneda, ahora = ym(hoy()), k = S.movs.some((m) => ym(m.fecha) === ahora) ? sumarMeses(ahora, 1) : ahora;
+  const lineas = [...(i.fijos || []).map((f) => ({ ...f })),
+    ...(i.compromisos || []).filter((x) => x.pagadas < x.cuotas).map((x) => ({ concepto: `${x.nombre} · cuota ${x.pagadas + 1} de ${x.cuotas}`, tipo: 'gasto', categoria: x.categoria || 'Otros gastos', valor: x.valorCuota, compromiso: x.id }))];
+  const fila = (l, n) => `<div class="linea-mes"><input type="checkbox" name="usa.${n}" checked aria-label="Incluir">
+    ${l.libre ? `<input name="con.${n}" placeholder="Concepto (imprevisto)">` : `<span>${l.tipo === 'ingreso' ? '<b class="entra">+</b> ' : ''}${esc(l.concepto)}</span>`}
+    <input name="val.${n}" inputmode="numeric" value="${fmtN(l.valor)}" aria-label="Valor"></div>`;
+  abrir(`<form><h2>Registrar mes</h2>
+    <label>Mes<input type="month" name="mes" value="${k}" required></label>
+    <p class="suave" style="margin:0;font-size:13px" id="yaHay"></p>
+    <div id="lineas" style="display:flex;flex-direction:column;gap:10px">${lineas.map(fila).join('')}</div>
+    <button type="button" class="btn sm" data-act="linea" style="align-self:flex-start">+ Pago extra o imprevisto</button>
+    <div class="total" id="tot"></div>
+    <div class="dos">${i.socios.map((s) => `<label>Pone ${esc(s.nombre)}<input name="ap.${esc(s.id)}" inputmode="numeric"></label>`).join('')}</div>
+    <div class="acc"><span></span><div>${cerrarBtn}<button class="btn pri">Guardar mes</button></div></div></form>`,
+  async (fd) => {
+    const mes = fd.get('mes'), fecha = `${mes}-01`, movs = [];
+    let ingresos = 0, gastos = 0;
+    lineas.forEach((l, n) => {
+      if (!fd.get('usa.' + n)) return;
+      const valor = leerValor(fd.get('val.' + n), c), concepto = l.libre ? (fd.get('con.' + n) || '').trim() : l.concepto;
+      if (!valor || !concepto) return;
+      l.tipo === 'ingreso' ? (ingresos += valor) : (gastos += valor);
+      movs.push({ id: nuevoId() + n, fecha, tipo: l.tipo, categoria: l.categoria, concepto, valor, nota: l.libre ? 'Imprevisto' : '', aportes: {} });
+    });
+    const aportes = {};
+    i.socios.forEach((s) => { const v = leerValor(fd.get('ap.' + s.id), c); if (v) aportes[s.id] = v; });
+    const suma = Object.values(aportes).reduce((a, b) => a + b, 0);
+    if (suma) movs.push({ id: nuevoId() + 'ap', fecha, tipo: 'aporte', categoria: 'Aporte socios', concepto: 'Aporte del mes', valor: suma, nota: '', aportes });
+    if (!movs.length) throw new Error('No hay nada para guardar.');
+    await api.guardarMovs(movs);
+    const usados = new Set(lineas.filter((l, n) => l.compromiso && fd.get('usa.' + n)).map((l) => l.compromiso));
+    if (usados.size) await api.guardarInv({ ...i, compromisos: i.compromisos.map((x) => (usados.has(x.id) ? { ...x, pagadas: x.pagadas + 1 } : x)) });
+  });
+  const f = $('form', dlg);
+  const calcular = () => {
+    let ing = 0, gas = 0;
+    lineas.forEach((l, n) => { if (!f['usa.' + n]?.checked) return; const v = leerValor(f['val.' + n].value, c); l.tipo === 'ingreso' ? (ing += v) : (gas += v); });
+    const falta = Math.max(gas - ing, 0);
+    $('#tot', f).innerHTML = `<div class="fila"><span>Ingresos</span><b class="num entra">${money(ing, c)}</b></div><div class="fila"><span>Gastos</span><b class="num sale">${money(gas, c)}</b></div><div class="fila"><b>Les toca poner</b><b class="num">${money(falta, c)}</b></div>`;
+    if (!f.dataset.tocado) i.socios.forEach((s) => (f['ap.' + s.id].value = fmtN(Math.round((falta * s.pct) / 100))));
+    const n = S.movs.filter((m) => ym(m.fecha) === f.mes.value).length;
+    $('#yaHay', f).innerHTML = n ? `<span style="color:var(--aviso)">Este mes ya tiene ${n} movimientos registrados.</span>` : '';
+  };
+  f.addEventListener('input', (e) => { if (e.target.name?.startsWith('ap.')) f.dataset.tocado = 1; calcular(); });
+  $('[data-act=linea]', f).onclick = () => {
+    const n = lineas.push({ libre: true, tipo: 'gasto', categoria: 'Mantenimiento y arreglos', valor: '' }) - 1;
+    $('#lineas', f).insertAdjacentHTML('beforeend', fila(lineas[n], n));
+    f['con.' + n].focus();
+  };
+  calcular();
+}
+
+function formRecordatorio(id) {
+  const i = inv(), r = (i.recordatorios || []).find((x) => x.id === id) || { titulo: '', fecha: hoy(), repite: 'no', nota: '' };
+  abrir(`<form><h2>${id ? 'Editar' : 'Nuevo'} recordatorio</h2>
+    <label>Qué<input name="titulo" required value="${esc(r.titulo)}" placeholder="Ej. Revisar el calentador"></label>
+    <div class="dos"><label>Fecha<input type="date" name="fecha" required value="${esc(r.fecha)}"></label>
+      <label>Se repite<select name="repite">${[['no', 'No'], ['mensual', 'Cada mes'], ['anual', 'Cada año']].map(([k, t]) => `<option value="${k}" ${r.repite === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div>
+    <label>Nota<textarea name="nota" rows="2">${esc(r.nota)}</textarea></label>
+    <div class="acc">${id ? '<button type="button" class="btn peli" data-act="borrarRec">Borrar</button>' : '<span></span>'}<div>${cerrarBtn}<button class="btn pri">Guardar</button></div></div></form>`,
+  async (fd) => {
+    const nuevo = { id: id || nuevoId(), titulo: fd.get('titulo').trim(), fecha: fd.get('fecha'), repite: fd.get('repite'), nota: fd.get('nota').trim() };
+    await api.guardarInv({ ...i, recordatorios: [...(i.recordatorios || []).filter((x) => x.id !== id), nuevo] });
+  });
+  $('[data-act=borrarRec]', dlg)?.addEventListener('click', async () => {
+    if (!confirm('¿Borrar este recordatorio?')) return;
+    await api.guardarInv({ ...i, recordatorios: i.recordatorios.filter((x) => x.id !== id) }); dlg.close();
+  });
+}
+
+function formNuevaInv() {
+  abrir(`<form><h2>Nueva inversión</h2>
+    <label>Nombre<input name="nombre" required placeholder="Ej. Local Chía"></label>
+    <div class="dos"><label>Ubicación<input name="ubicacion"></label><label>Moneda<select name="moneda"><option>COP</option><option>USD</option><option>EUR</option></select></label></div>
+    <div class="dos"><label>Precio de compra<input name="precio" inputmode="decimal" required></label><label>Área m² (opcional)<input name="area" inputmode="decimal"></label></div>
+    <p class="suave" style="margin:0;font-size:13px">Queda 50/50 entre Alejo y Sebas; lo puedes cambiar en Datos.</p>
+    <div class="acc"><span></span><div>${cerrarBtn}<button class="btn pri">Crear</button></div></div></form>`,
+  async (fd) => {
+    const moneda = fd.get('moneda'), id = fd.get('nombre').toLowerCase().normalize('NFD').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '') + '-' + nuevoId().slice(-4);
+    const x = { id, nombre: fd.get('nombre').trim(), ubicacion: fd.get('ubicacion').trim(), moneda, precioCompra: leerValor(fd.get('precio'), moneda),
+      area: leerValor(fd.get('area'), 'USD') || null, valorEstimado: leerValor(fd.get('precio'), moneda),
+      socios: [{ id: 'alejo', nombre: 'Alejo', pct: 50 }, { id: 'sebas', nombre: 'Sebas', pct: 50 }], fijos: [], compromisos: [], recordatorios: [] };
+    await api.guardarInv(x); elegirInv(id); S.tab = 'resumen';
+  });
+}
+
+function menuMas() {
+  abrir(`<form><h2>Registrar</h2>
+    <button type="button" class="btn pri" data-op="mes" style="text-align:left">Pagos del mes<br><small style="font-weight:400;opacity:.8">Arriendo, administración, cuota y lo que cada uno pone</small></button>
+    <button type="button" class="btn" data-op="gasto" style="text-align:left">Pago extra o imprevisto</button>
+    <button type="button" class="btn" data-op="ingreso" style="text-align:left">Otro ingreso</button>
+    <button type="button" class="btn" data-op="abono" style="text-align:left">Abono entre socios</button>
+    <button type="button" class="btn" data-op="rec" style="text-align:left">Recordatorio</button>
+    <div class="acc"><span></span><div>${cerrarBtn}</div></div></form>`, async () => {});
+  $('form', dlg).addEventListener('click', (e) => {
+    const op = e.target.closest('[data-op]')?.dataset.op;
+    if (!op) return;
+    dlg.close();
+    ({ mes: formMes, gasto: () => formMov({ tipo: 'gasto' }), ingreso: () => formMov({ tipo: 'ingreso', categoria: 'Otros ingresos' }), abono: () => formMov({ tipo: 'ajuste' }), rec: () => formRecordatorio() })[op]();
+  });
+}
+
+async function importarArchivo(file) {
+  const data = JSON.parse(await file.text());
+  if (!data.inversion?.id || !Array.isArray(data.movimientos)) throw new Error('El archivo no tiene el formato de historial.');
+  if (S.invs[data.inversion.id] && !confirm(`"${data.inversion.nombre}" ya existe. ¿Reemplazar sus datos con los del archivo? Los movimientos con el mismo id se sobrescriben.`)) return;
+  await api.importar(data);
+  elegirInv(data.inversion.id); S.tab = 'resumen'; render();
+}
+function exportar() {
+  const i = inv(), blob = new Blob([JSON.stringify({ inversion: i, movimientos: S.movs }, null, 1)], { type: 'application/json' });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `respaldo-${i.id}-${hoy()}.json` });
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+// ── Eventos ───────────────────────────────────────────────────
+document.addEventListener('click', async (e) => {
+  const t = e.target.closest('[data-tab],[data-act],[data-mov]');
+  if (!t) return;
+  if (t.dataset.tab) { e.preventDefault(); S.tab = t.dataset.tab; render(); scrollTo(0, 0); return; }
+  if (t.dataset.mov && !t.dataset.act) return formMov(structuredClone(S.movs.find((m) => m.id === t.dataset.mov)));
+  const act = t.dataset.act;
+  try {
+    if (act === 'entrar') await api.entrar();
+    else if (act === 'salir') { e.preventDefault(); await api.salir(); }
+    else if (act === 'cerrar') dlg.close();
+    else if (act === 'menuMas') menuMas();
+    else if (act === 'registrarMes') formMes();
+    else if (act === 'abono') formMov({ tipo: 'ajuste' });
+    else if (act === 'recordatorio') formRecordatorio(t.dataset.id);
+    else if (act === 'nuevaInv') formNuevaInv();
+    else if (act === 'exportar') exportar();
+    else if (act === 'hecho') {
+      const i = inv(), r = i.recordatorios.find((x) => x.id === t.dataset.id);
+      const resto = i.recordatorios.filter((x) => x.id !== r.id);
+      const sig = r.repite === 'no' ? null : { ...r, fecha: sumarMeses(ym(proximaFecha(r, hoy())), r.repite === 'anual' ? 12 : 1) + r.fecha.slice(7) };
+      await api.guardarInv({ ...i, recordatorios: sig ? [...resto, sig] : resto });
+    } else if (act === 'addCredito') await api.guardarInv({ ...inv(), credito: { banco: '', monto: 0, saldo: 0, saldoFecha: hoy(), proximaCuota: 1, plazo: 180, tasaEA: 12, cuotaSinSubsidio: 0, subsidio: 0, subsidioHastaCuota: 0, seguros: 0, diaPago: 10 } });
+    else if (act === 'addContrato') await api.guardarInv({ ...inv(), contrato: { inicio: hoy(), meses: 12, canon: 0, diaPago: '5 al 10', deposito: 0, modalidad: 'Directo' } });
+  } catch (err) { alert(err.message); }
+});
+document.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.mov')) { e.preventDefault(); e.target.click(); } });
+document.addEventListener('change', async (e) => {
+  const t = e.target;
+  if (t.dataset.f) { S.f[t.dataset.f] = t.value; render(); }
+  else if (t.dataset.act === 'inv') { elegirInv(t.value); render(); }
+  else if (t.dataset.act === 'importar' && t.files[0]) { try { await importarArchivo(t.files[0]); } catch (err) { alert(err.message); } t.value = ''; }
+});
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  if (t.dataset.f === 'q') { S.f.q = t.value; const pos = t.selectionStart; render(); const n = $('[data-f=q]'); n.focus(); n.setSelectionRange(pos, pos); }
+  const sim = t.closest('[data-act=simular]');
+  if (sim) {
+    const cr = inv().credito, c = cur(), base = proyeccion(cr);
+    $('#sim').innerHTML = simular(cr, c, leerValor(sim.u.value, c), leerValor(sim.m.value, c), base, sumarMeses(ym(cr.saldoFecha), 1));
+  }
+});
+document.addEventListener('submit', async (e) => {
+  if (e.target.dataset.act !== 'datos') return;
+  e.preventDefault();
+  const i = structuredClone(inv()), fd = new FormData(e.target), c = i.moneda;
+  for (const [, campos] of CAMPOS) for (const [p, , tipo] of campos) if (fd.has(p)) poner(i, p, tipo === 'n' ? leerValor(fd.get(p), 'USD') : fd.get(p).trim());
+  i.socios.forEach((s, k) => { s.nombre = fd.get(`socio.${k}.nombre`).trim(); s.pct = leerValor(fd.get(`socio.${k}.pct`), 'USD'); });
+  (i.fijos || []).forEach((f, k) => (f.valor = leerValor(fd.get('fijo.' + k), c)));
+  const suma = i.socios.reduce((a, s) => a + s.pct, 0);
+  if (Math.abs(suma - 100) > 0.01) return alert(`Los porcentajes suman ${suma}%. Deben sumar 100%.`);
+  try { await api.guardarInv(i); alert('Cambios guardados.'); } catch (err) { alert(`No se pudo guardar: ${err.message}`); }
+});
+
+// ── Inicio ────────────────────────────────────────────────────
+if (window.SEED) vistaPrevia(window.SEED);
+else if (FIREBASE_CONFIG) conectarFirebase().catch((e) => { api = null; S.error = `No se pudo conectar con Firebase: ${e.message}`; S.cargando = false; render(); });
+else { S.cargando = false; S.error = 'Falta pegar el firebaseConfig de Firebase en index.html.'; }
+render();
+</script>
+</body>
+</html>
