@@ -183,7 +183,7 @@ const CATEGORIAS = {
   gasto: ['Crédito hipotecario', 'Administración', 'Servicios', 'Impuestos', 'Mantenimiento y arreglos', 'Mejoras y dotación', 'Cuota extraordinaria', 'Gestión arriendo', 'Trámites', 'Seguros', 'Abono a capital', 'Ahorro abono extra', 'Compra', 'Otros gastos'],
   ingreso: ['Arriendo', 'Otros ingresos'],
   aporte: ['Aporte socios'],
-  ajuste: ['Abono entre socios', 'Cuadre socios'],
+  ajuste: ['Abono entre socios', 'Cuadre socios', 'Fuera de la inversión'],
 };
 const TIPOS = { gasto: 'Gasto', ingreso: 'Ingreso', aporte: 'Aporte de socios', ajuste: 'Abono entre socios' };
 const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -437,7 +437,7 @@ const VISTAS = {
   socios(i) {
     const c = i.moneda, esCompra = (m) => m.categoria === 'Compra' || (m.categoria === 'Trámites' && m.fecha < (i.credito?.desembolso || '9999'));
     const q = cuadre(i.socios, S.movs), qc = cuadre(i.socios, S.movs.filter(esCompra));
-    const abonos = S.movs.filter((m) => m.tipo === 'ajuste').sort((a, b) => b.fecha.localeCompare(a.fecha));
+    const abonos = S.movs.filter((m) => m.tipo === 'ajuste' && m.categoria !== 'Fuera de la inversión').sort((a, b) => b.fecha.localeCompare(a.fecha));
     const deudor = q.socios.filter((s) => s.dif < -1).sort((a, b) => a.dif - b.dif)[0];
     return `<div class="rejilla">${q.socios.map((s) => {
         const sc = qc.socios.find((x) => x.id === s.id);
@@ -557,7 +557,7 @@ const cerrarBtn = '<button type="button" class="btn" data-act="cerrar">Cancelar<
 function formMov(m) {
   const i = inv(), c = i.moneda, nuevo = !m.id;
   m = { tipo: 'gasto', fecha: hoy(), concepto: '', categoria: '', valor: '', nota: '', aportes: {}, ...m };
-  const esAbono = m.tipo === 'ajuste' && m.categoria !== 'Cuadre socios';
+  const esAbono = m.tipo === 'ajuste' && m.categoria === 'Abono entre socios';
   const de = esAbono ? Object.entries(m.aportes).find(([, v]) => v > 0)?.[0] : null, para = esAbono ? Object.entries(m.aportes).find(([, v]) => v < 0)?.[0] : null;
   abrir(`<form>
     <h2>${nuevo ? (esAbono ? 'Abono entre socios' : 'Nuevo movimiento') : 'Editar movimiento'}</h2>
