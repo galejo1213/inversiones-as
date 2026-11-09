@@ -78,6 +78,7 @@ select.inv{border:1px solid var(--linea);background:var(--hoja);border-radius:10
 .big{font-family:var(--disp);font-stretch:118%;font-weight:750;font-size:clamp(26px,3.6vw,36px);line-height:1.05}
 .fila{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:8px 0;border-bottom:1px solid var(--linea)}
 .fila:last-child{border-bottom:0}
+.fila b.num{white-space:nowrap}
 .barra{height:8px;border-radius:99px;background:var(--linea);overflow:hidden;display:flex}
 .barra i{display:block;height:100%}
 .chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:2px 8px;border-radius:99px;background:var(--papel);color:var(--suave);white-space:nowrap}
@@ -139,6 +140,16 @@ input,select,textarea{border:1px solid var(--linea);border-radius:10px;padding:1
 .linea-mes input[type=checkbox]{width:18px;height:18px}
 .total{background:var(--papel);border-radius:12px;padding:12px 14px}
 
+.pend{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--linea)}
+.marca-p{width:20px;height:20px;border-radius:50%;border:1.5px dashed var(--suave);display:grid;place-items:center;font-size:12px;font-weight:700}
+.pend.ok .marca-p{border:0;background:var(--entra);color:var(--hoja)}
+.chip.caja{background:color-mix(in srgb,var(--entra) 14%,transparent);color:var(--entra)}
+.cajal{max-height:560px;overflow:auto;margin:0 -4px}
+.cajaf{display:grid;grid-template-columns:minmax(0,1fr) auto 130px;gap:2px 14px;align-items:center;padding:10px 4px;border-bottom:1px solid var(--linea);cursor:pointer}
+.cajaf:hover{background:var(--papel)}
+.cajac{display:block}.cajas{text-align:right;font-size:13px}
+@media (max-width:520px){.cajaf{grid-template-columns:minmax(0,1fr) auto}.cajas{grid-column:2;font-size:12px}}
+
 /* login */
 .login{min-height:100vh;display:grid;place-items:center;padding:24px}
 .login .c{max-width:420px;text-align:left}
@@ -177,15 +188,16 @@ const FIREBASE_CONFIG = {
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
 // ───────────────────────────────────────────────────────────────
 
-import { porMes, cuadre, proyeccion, tasaMes, sumarMeses, metros, proximaFecha, ym, leerValor } from './calculos.js';
+import { porMes, cuadre, proyeccion, tasaMes, sumarMeses, metros, proximaFecha, ym, leerValor, esCompra, movsCaja, aportesDe, cuotasPagadas, estadoMes } from './calculos.js';
 
 const CATEGORIAS = {
   gasto: ['Crédito hipotecario', 'Administración', 'Servicios', 'Impuestos', 'Mantenimiento y arreglos', 'Mejoras y dotación', 'Cuota extraordinaria', 'Gestión arriendo', 'Trámites', 'Seguros', 'Abono a capital', 'Ahorro abono extra', 'Compra', 'Otros gastos'],
   ingreso: ['Arriendo', 'Otros ingresos'],
   aporte: ['Aporte socios'],
   ajuste: ['Abono entre socios', 'Cuadre socios', 'Fuera de la inversión'],
+  caja: ['Envío a la caja', 'Pago a Yaneth', 'Saldo inicial', 'Fuera de la inversión'],
 };
-const TIPOS = { gasto: 'Gasto', ingreso: 'Ingreso', aporte: 'Aporte de socios', ajuste: 'Abono entre socios' };
+const TIPOS = { gasto: 'Gasto', ingreso: 'Ingreso', aporte: 'Envío de plata', ajuste: 'Abono entre socios', caja: 'Movimiento de caja' };
 const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -208,9 +220,15 @@ function corto(n) {
 const pct = (x, d = 1) => `${(x * 100).toLocaleString('es-CO', { maximumFractionDigits: d })} %`;
 
 // ── Estado ────────────────────────────────────────────────────
-const S = { user: null, cargando: true, sinAcceso: false, invs: {}, movs: [], invId: null, tab: 'resumen', f: { anio: '', tipo: '', q: '' }, demo: false, error: '' };
+const S = { user: null, cargando: true, sinAcceso: false, invs: {}, movs: [], invId: null, tab: 'resumen', f: { anio: '', tipo: '', q: '' }, demo: false, error: '', yo: null, verComo: null, accesos: [] };
 const inv = () => S.invs[S.invId];
 const cur = () => inv()?.moneda || 'COP';
+// Quién está usando la app. Sin documento de acceso = el dueño (las reglas de Firebase solo dejan entrar a él así).
+const yo = () => S.verComo || S.yo || { rol: 'dueño', socio: 'alejo' };
+const esSocio = () => yo().rol !== 'administra';
+const miCaja = () => yo().caja;
+const puede = (m) => esSocio() || (!!m.cuenta && m.cuenta === miCaja());
+const nombreCaja = (id) => (inv()?.cajas || []).find((x) => x.id === id)?.nombre || id;
 try { S.invId = localStorage.getItem('inv'); } catch {}
 
 // ── Datos: Firebase o vista previa en memoria ────────────────
@@ -219,7 +237,7 @@ async function conectarFirebase() {
   const [{ initializeApp }, A, F] = await Promise.all([
     import(SDK + 'firebase-app.js'), import(SDK + 'firebase-auth.js'), import(SDK + 'firebase-firestore.js')]);
   const app = initializeApp(FIREBASE_CONFIG), auth = A.getAuth(app), db = F.getFirestore(app);
-  let offMovs = null, offInvs = null;
+  let offMovs = null, offInvs = null, offAcc = null;
   const fallo = (e) => { if (e.code === 'permission-denied') S.sinAcceso = true; else S.error = e.message; S.cargando = false; render(); };
   api = {
     entrar: async () => { const p = new A.GoogleAuthProvider(); try { await A.signInWithPopup(auth, p); } catch (e) { if (/popup/.test(e.code)) await A.signInWithRedirect(auth, p); else throw e; } },
@@ -231,8 +249,16 @@ async function conectarFirebase() {
     },
     guardarInv: (x) => F.setDoc(F.doc(db, 'inversiones', x.id), x),
     guardarMov: (m) => F.setDoc(F.doc(db, 'inversiones', S.invId, 'movimientos', m.id), m),
-    guardarMovs: async (ms) => { const b = F.writeBatch(db); ms.forEach((m) => b.set(F.doc(db, 'inversiones', S.invId, 'movimientos', m.id), m)); await b.commit(); },
+    async guardarMovs(ms) {
+      for (let k = 0; k < ms.length; k += 400) {
+        const b = F.writeBatch(db);
+        ms.slice(k, k + 400).forEach((m) => b.set(F.doc(db, 'inversiones', S.invId, 'movimientos', m.id), m));
+        await b.commit();
+      }
+    },
     borrarMov: (id) => F.deleteDoc(F.doc(db, 'inversiones', S.invId, 'movimientos', id)),
+    guardarAcceso: (email, x) => F.setDoc(F.doc(db, 'accesos', email), x),
+    borrarAcceso: (email) => F.deleteDoc(F.doc(db, 'accesos', email)),
     async importar({ inversion, movimientos }) {
       await F.setDoc(F.doc(db, 'inversiones', inversion.id), inversion);
       for (let k = 0; k < movimientos.length; k += 400) {
@@ -242,10 +268,14 @@ async function conectarFirebase() {
       }
     },
   };
-  A.onAuthStateChanged(auth, (u) => {
-    S.user = u; S.sinAcceso = false; offInvs?.(); offMovs?.();
+  A.onAuthStateChanged(auth, async (u) => {
+    S.user = u; S.sinAcceso = false; S.yo = null; S.verComo = null; offInvs?.(); offMovs?.(); offAcc?.();
     if (!u) { S.cargando = false; return render(); }
     S.cargando = true; render();
+    try { const d = await F.getDoc(F.doc(db, 'accesos', u.email.toLowerCase())); if (d.exists()) S.yo = d.data(); }
+    catch (e) { if (e.code !== 'permission-denied') S.error = e.message; }
+    if (!S.yo) offAcc = F.onSnapshot(F.collection(db, 'accesos'), (q) => { S.accesos = q.docs.map((d) => ({ email: d.id, ...d.data() })); render(); }, () => {});
+    if (S.yo?.rol === 'administra') S.tab = 'caja';
     offInvs = F.onSnapshot(F.collection(db, 'inversiones'), (q) => {
       S.invs = Object.fromEntries(q.docs.map((d) => [d.id, d.data()]));
       S.cargando = false;
@@ -263,8 +293,10 @@ function vistaPrevia(seed) {
     verMovs: emitir,
     guardarInv: async (x) => { S.invs[x.id] = structuredClone(x); render(); },
     guardarMov: async (m) => { const l = (movs[S.invId] ??= []); const k = l.findIndex((x) => x.id === m.id); k < 0 ? l.push(m) : (l[k] = m); emitir(); },
-    guardarMovs: async (ms) => { for (const m of ms) await api.guardarMov(m); },
+    guardarMovs: async (ms) => { const l = (movs[S.invId] ??= []); for (const m of ms) { const k = l.findIndex((x) => x.id === m.id); k < 0 ? l.push(m) : (l[k] = m); } emitir(); },
     borrarMov: async (id) => { movs[S.invId] = movs[S.invId].filter((x) => x.id !== id); emitir(); },
+    guardarAcceso: async (email, x) => { S.accesos = [...S.accesos.filter((a) => a.email !== email), { email, ...x }]; render(); },
+    borrarAcceso: async (email) => { S.accesos = S.accesos.filter((a) => a.email !== email); render(); },
     importar: async ({ inversion, movimientos }) => { S.invs[inversion.id] = inversion; movs[inversion.id] = movimientos; elegirInv(inversion.id); },
   };
   api.importar(seed);
@@ -290,15 +322,19 @@ function render() {
     return;
   }
   const i = inv();
-  const nav = TABS.map(([k, t]) => `<button data-tab="${k}" ${S.tab === k ? 'aria-current="page"' : ''}>${t}</button>`).join('');
+  const tabs = TABS.flatMap(([k, t]) => (k === 'inversion' && !esSocio() ? [] : k === 'socios' && i?.cajas?.length ? [[k, t], ['caja', `Caja ${nombreCaja(i.cajas[0].id)}`]] : [[k, t]]));
+  if (!tabs.some(([k]) => k === S.tab)) S.tab = 'resumen';
+  const nav = tabs.map(([k, t]) => `<button data-tab="${k}" ${S.tab === k ? 'aria-current="page"' : ''}>${t}</button>`).join('');
+  const banner = S.verComo ? `<p class="alerta" style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 16px">
+    <span>Estás viendo la app como <b>${esc(S.verComo.nombre)}</b>. Lo que guardes sí queda guardado.</span><button class="btn sm" data-act="verComo" data-v="">Volver a mi vista</button></p>` : '';
   const sel = Object.keys(S.invs).length > 1
     ? `<select class="inv" data-act="inv" aria-label="Inversión">${Object.values(S.invs).map((x) => `<option value="${esc(x.id)}" ${x.id === S.invId ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select>` : '';
   el.innerHTML = `<div class="app">
     <aside class="lado"><div class="marca">Inversiones AS<small>Alejo & Sebas</small></div>
       ${i ? `<nav class="nav" aria-label="Secciones">${nav}</nav>` : ''}
       <div class="pie">${S.demo ? 'Vista previa · los cambios no se guardan' : esc(S.user.email)}<br>${S.demo ? '' : '<a href="#" data-act="salir">Cerrar sesión</a>'}</div></aside>
-    <main>${i ? `<div class="cab"><div><h1>${esc(i.nombre)}</h1><div class="lugar">${esc([i.detalle, i.ubicacion].filter(Boolean).join(' · '))}</div></div>
-      <div style="display:flex;gap:8px;align-items:center">${sel}<button class="btn sm" data-act="nuevaInv">+ Inversión</button></div></div>
+    <main>${banner}${i ? `<div class="cab"><div><h1>${esc(i.nombre)}</h1><div class="lugar">${esc([i.detalle, i.ubicacion].filter(Boolean).join(' · '))}</div></div>
+      <div style="display:flex;gap:8px;align-items:center">${sel}${esSocio() ? '<button class="btn sm" data-act="nuevaInv">+ Inversión</button>' : ''}</div></div>
       ${S.error ? `<p class="alerta">${esc(S.error)}</p>` : ''}${VISTAS[S.tab](i)}` : vistaVacia()}</main>
     ${i ? '<button class="mas" data-act="menuMas" aria-label="Registrar">+</button>' : ''}</div>`;
 }
@@ -343,20 +379,25 @@ const VISTAS = {
           <div><span class="eti">Plusvalía vs compra</span><b class="${valor >= i.precioCompra ? 'entra' : 'sale'}">${pct(valor / i.precioCompra - 1, 0)}</b></div>
         </div></section>`;
     }
-    const k = ym(hoy()), m = meses[k];
-    const fijos = (i.fijos || []).reduce((a, f) => a + (f.tipo === 'ingreso' ? -f.valor : f.valor), 0) + (i.compromisos || []).filter((x) => x.pagadas < x.cuotas).reduce((a, x) => a + x.valorCuota, 0);
-    const deudor = q.socios.filter((s) => s.dif < -1).sort((a, b) => a.dif - b.dif)[0], acreedor = q.socios.filter((s) => s.dif > 1).sort((a, b) => b.dif - a.dif)[0];
+    const k = ym(hoy()), em = estadoMes(i, S.movs, k), listos = em.items.filter((it) => it.hecho).length;
+    const ec = esCompra(i), qc = cuadre(i.socios, S.movs.filter(ec)), qm = cuadre(i.socios, S.movs.filter((m) => !ec(m)));
+    const deudor = qc.socios.filter((s) => s.dif < -1).sort((a, b) => a.dif - b.dif)[0], acreedor = qc.socios.filter((s) => s.dif > 1).sort((a, b) => b.dif - a.dif)[0];
     const prox = agenda(i).slice(0, 4);
     return `<div class="rejilla">${firma}
-      <section class="c s5"><h2>${mesTxt(k, true)} ${m?.n ? '<span class="chip">registrado</span>' : '<span class="chip" style="color:var(--aviso)">pendiente</span>'}</h2>
-        ${m?.n ? `<div class="fila"><span>Ingresos</span><b class="num entra">${money(m.ingresos, c)}</b></div>
-          <div class="fila"><span>Gastos</span><b class="num sale">${money(m.gastos, c)}</b></div>
-          <div class="fila"><span>Pusieron entre los dos</span><b class="num">${money(m.aporte, c)}</b></div>`
-        : `<p class="suave" style="margin-top:0">Con los pagos fijos, este mes les toca poner cerca de <b class="num">${money(Math.max(fijos, 0), c)}</b> entre los dos.</p>`}
-        <p style="margin:14px 0 0"><button class="btn ${m?.n ? '' : 'pri'}" data-act="registrarMes">${m?.n ? 'Registrar otro mes' : 'Registrar este mes'}</button></p></section>
-      <section class="c s7"><h2>Cuadre entre socios <a href="#" data-tab="socios" class="eti">ver detalle</a></h2>
-        ${deudor && acreedor ? `<div class="big num">${money(-deudor.dif, c)}</div><p class="suave" style="margin:6px 0 14px">le falta poner a <b style="color:var(--${esc(deudor.id)})">${esc(deudor.nombre)}</b> para quedar ${deudor.pct}/${acreedor.pct} con ${esc(acreedor.nombre)}</p>`
-        : `<div class="big">Están al día</div><p class="suave">Cada uno ha puesto lo que le toca.</p>`}
+      <section class="c s7"><h2>${mesTxt(k, true)} <span class="chip">${listos} de ${em.items.length} listos</span></h2>
+        ${em.items.map((it, n) => `<div class="pend${it.hecho ? ' ok' : ''}"><span class="marca-p" aria-hidden="true">${it.hecho ? '✓' : ''}</span>
+          <span>${esc(it.hecho?.concepto || it.concepto)}<br><small class="suave">${it.hecho ? `${fechaTxt(it.hecho.fecha)} · ${esc(quienTxt(it.hecho, i))}` : `Pendiente · ${it.tipo === 'ingreso' ? 'se espera' : 'aprox.'} ${money(it.valor, c)}`}</small></span>
+          ${it.hecho ? `<b class="num ${it.tipo === 'ingreso' ? 'entra' : ''}">${it.tipo === 'ingreso' ? '+' : ''}${money(it.hecho.valor, c)}</b>` : `<button class="btn sm" data-act="fijo" data-n="${n}">Registrar</button>`}</div>`).join('')}
+        ${em.extra.map((m) => `<div class="pend ok" data-mov="${esc(m.id)}" style="cursor:pointer"><span class="marca-p" aria-hidden="true">✓</span><span>${esc(m.concepto)}<br><small class="suave">${fechaTxt(m.fecha)} · ${esc(quienTxt(m, i))}</small></span><b class="num ${m.tipo === 'ingreso' ? 'entra' : ''}">${m.tipo === 'ingreso' ? '+' : ''}${money(m.valor, c)}</b></div>`).join('')}
+        <p style="margin:12px 0 18px"><button class="btn sm" data-act="nuevoPago">+ Pago extra o imprevisto</button></p>
+        <div class="eti" style="margin-bottom:8px">Cada uno · ${money(em.neto, c)} entre los dos este mes</div>
+        ${em.socios.map((s) => { const falta = s.toca - s.puso; return `<div class="fila"><span><b style="color:var(--${esc(s.id)},var(--alejo))">${esc(s.nombre)}</b> <small class="suave">ha puesto ${money(s.puso, c)} de ${money(s.toca, c)}</small></span>
+          <b class="num ${falta > 1 ? 'sale' : 'entra'}">${falta > 1 ? `Falta ${money(falta, c)}` : falta < -1 ? `+${money(-falta, c)}` : 'Al día'}</b></div>`; }).join('')}
+        <p class="suave" style="font-size:12.5px;margin:8px 0 0">Cuenta lo que cada uno paga directo o envía a la caja, menos lo que recibe del arriendo.</p></section>
+      <section class="c s5"><h2>Cuadre entre socios <a href="#" data-tab="socios" class="eti">ver detalle</a></h2>
+        ${deudor && acreedor ? `<span class="eti">Compra</span><div class="big num">${money(-deudor.dif, c)}</div><p class="suave" style="margin:6px 0 14px">le falta poner a <b style="color:var(--${esc(deudor.id)})">${esc(deudor.nombre)}</b> de la compra para quedar ${deudor.pct}/${acreedor.pct}</p>`
+        : `<div class="big">Compra al día</div><p class="suave">Cada uno puso lo que le toca en la compra.</p>`}
+        ${(() => { const d = qm.socios.filter((s) => s.dif < -1).sort((a, b) => a.dif - b.dif)[0]; return `<div class="fila" style="margin-bottom:12px"><span>Mes a mes</span><b class="num ${d ? 'sale' : 'entra'}">${d ? `${esc(d.nombre)} debe ${money(-d.dif, c)}` : 'Al día'}</b></div>`; })()}
         <div class="barra" aria-hidden="true">${q.socios.map((s) => `<i style="width:${(s.puesto / q.total) * 100}%;background:var(--${esc(s.id)},var(--alejo))"></i>`).join('')}</div>
         <div class="leyenda">${q.socios.map((s) => `<span style="--k:var(--${esc(s.id)},var(--alejo))">${esc(s.nombre)} ha puesto ${corto(s.puesto)} (${pct(s.puesto / q.total, 0)})</span>`).join('')}</div></section>
       <section class="c s8 graf"><h2>Flujo mensual · arriendo menos gastos</h2>${grafFlujo(meses, keys.slice(-24), c)}
@@ -435,17 +476,19 @@ const VISTAS = {
   },
 
   socios(i) {
-    const c = i.moneda, esCompra = (m) => m.categoria === 'Compra' || (m.categoria === 'Trámites' && m.fecha < (i.credito?.desembolso || '9999'));
-    const q = cuadre(i.socios, S.movs), qc = cuadre(i.socios, S.movs.filter(esCompra));
+    const c = i.moneda, ec = esCompra(i);
+    const q = cuadre(i.socios, S.movs), qc = cuadre(i.socios, S.movs.filter(ec)), qm = cuadre(i.socios, S.movs.filter((m) => !ec(m)));
     const abonos = S.movs.filter((m) => m.tipo === 'ajuste' && m.categoria !== 'Fuera de la inversión').sort((a, b) => b.fecha.localeCompare(a.fecha));
-    const deudor = q.socios.filter((s) => s.dif < -1).sort((a, b) => a.dif - b.dif)[0];
+    const deudor = qc.socios.filter((s) => s.dif < -1).sort((a, b) => a.dif - b.dif)[0];
+    const dif = (d) => `<b class="num ${d >= -1 ? 'entra' : 'sale'}">${Math.abs(d) <= 1 ? 'Al día' : `${d > 0 ? 'Puso de más' : 'Le falta'} ${money(Math.abs(d), c)}`}</b>`;
     return `<div class="rejilla">${q.socios.map((s) => {
-        const sc = qc.socios.find((x) => x.id === s.id);
+        const sc = qc.socios.find((x) => x.id === s.id), sm = qm.socios.find((x) => x.id === s.id);
         return `<section class="c s6" style="border-top:4px solid var(--${esc(s.id)},var(--alejo))"><h2>${esc(s.nombre)} <span class="eti">${s.pct}% del apto</span></h2>
           <div class="big num">${money(s.puesto, c)}</div><p class="suave" style="margin:6px 0 12px">puesto en total · ${pct(s.puesto / q.total)} de todo lo aportado</p>
           <div class="fila"><span>En la compra (cuota inicial y escrituración)</span><b class="num">${money(sc.puesto, c)}</b></div>
-          <div class="fila"><span>Desde la entrega</span><b class="num">${money(s.puesto - sc.puesto, c)}</b></div>
-          <div class="fila"><span>${s.dif >= 0 ? 'Ha puesto de más' : 'Le falta para su %'}</span><b class="num ${s.dif >= 0 ? 'entra' : 'sale'}">${money(Math.abs(s.dif), c)}</b></div></section>`;
+          <div class="fila"><span>Cuadre de la compra</span>${dif(sc.dif)}</div>
+          <div class="fila"><span>Mes a mes desde la entrega</span><b class="num">${money(sm.puesto, c)}</b></div>
+          <div class="fila"><span>Cuadre mes a mes</span>${dif(sm.dif)}</div></section>`;
       }).join('')}
       <section class="c s12"><h2>Abonos y cuadres <button class="btn sm" data-act="abono">Registrar abono</button></h2>
         ${deudor ? `<p class="suave" style="margin-top:0">Cada abono de ${esc(deudor.nombre)} baja la diferencia. Cuando llegue a cero, quedan ${i.socios.map((s) => s.pct).join('/')}.</p>` : ''}
@@ -453,9 +496,9 @@ const VISTAS = {
   },
 
   agenda(i) {
-    const comp = (i.compromisos || []).map((x) => `<div class="fila"><span><b>${esc(x.nombre)}</b> <span class="chip">${x.pagadas} de ${x.cuotas}</span><br><small class="suave">${money(x.valorCuota, i.moneda)} al mes · ${esc(x.medio || '')} · termina ${mesTxt(sumarMeses(x.inicio, x.cuotas - 1))}</small></span>
-      <span style="text-align:right"><b class="num">${corto((x.cuotas - x.pagadas) * x.valorCuota)}</b><br><small class="suave">por pagar</small></span></div>
-      <div class="barra" style="margin-bottom:10px"><i style="width:${(x.pagadas / x.cuotas) * 100}%;background:var(--alejo)"></i></div>`).join('');
+    const comp = (i.compromisos || []).map((x) => { const p = cuotasPagadas(x, S.movs); return `<div class="fila"><span><b>${esc(x.nombre)}</b> <span class="chip">${p} de ${x.cuotas}</span><br><small class="suave">${money(x.valorCuota, i.moneda)} al mes · ${esc(x.medio || '')} · termina ${mesTxt(sumarMeses(x.inicio, x.cuotas - 1))}</small></span>
+      <span style="text-align:right"><b class="num">${corto((x.cuotas - p) * x.valorCuota)}</b><br><small class="suave">por pagar</small></span></div>
+      <div class="barra" style="margin-bottom:10px"><i style="width:${(p / x.cuotas) * 100}%;background:var(--alejo)"></i></div>`; }).join('');
     return `<div class="rejilla">
       <section class="c s7"><h2>Recordatorios <button class="btn sm" data-act="recordatorio">Agregar</button></h2>${agenda(i).map(filaAgenda).join('')}</section>
       <section class="c s5"><h2>Pagos a cuotas</h2>${comp || '<p class="suave">Nada a cuotas.</p>'}
@@ -477,9 +520,81 @@ const VISTAS = {
       <section class="c s4"><h2>Respaldo</h2><p class="suave" style="margin-top:0">Descarga todo (datos y movimientos) en un archivo. Hazlo de vez en cuando.</p>
         <button class="btn" data-act="exportar">Descargar respaldo</button>
         <h2 style="margin-top:24px">Importar</h2><p class="suave" style="margin-top:0">Carga un archivo de historial o un respaldo.</p>
-        <label class="btn" style="flex-direction:row;color:var(--tinta);display:inline-flex">Elegir archivo<input type="file" accept="application/json" data-act="importar" hidden></label></section></div>`;
+        <label class="btn" style="flex-direction:row;color:var(--tinta);display:inline-flex">Elegir archivo<input type="file" accept="application/json" data-act="importar" hidden></label></section>
+      ${!S.yo && !S.verComo ? vistaAccesos(i) : ''}</div>`;
+  },
+
+  caja(i) {
+    const cj = (i.cajas || [])[0], c = i.moneda;
+    if (!cj) return '<div class="c vacio"><p class="suave">Esta inversión no tiene una caja administrada.</p></div>';
+    const l = movsCaja(S.movs, cj.id), ult = l.at(-1), saldo = Math.round(ult?.saldo || 0), admin = !esSocio();
+    const entra = {}, sale = {};
+    for (const m of l) {
+      if (m.efecto > 0) { const k = m.de || Object.keys(m.aportes || {}).find((x) => m.aportes[x] > 0) || 'otros'; entra[k] = (entra[k] || 0) + m.efecto; }
+      else sale[m.categoria] = (sale[m.categoria] || 0) - m.efecto;
+    }
+    const nom = (k) => i.socios.find((s) => s.id === k)?.nombre || 'Otros (saldo inicial, arrendataria)';
+    const topSale = Object.entries(sale).sort((a, b) => b[1] - a[1]);
+    return `<div class="rejilla">
+      <section class="c s7"><h2>Caja de ${esc(cj.nombre)} ${ult ? `<span class="eti">al ${fechaTxt(ult.fecha)}</span>` : ''}</h2>
+        <div class="big num ${saldo < 0 ? 'sale' : ''}">${money(Math.abs(saldo), c)}</div>
+        <p class="suave" style="margin:6px 0 16px">${saldo < 0 ? `<b>Le deben a ${esc(cj.nombre)}.</b> Ha pagado esto de su plata y se le devuelve con el próximo envío.` : saldo > 0 ? `${esc(cj.nombre)} tiene esta plata de ustedes para los próximos pagos.` : 'La caja está en cero.'}</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn pri" data-act="recibir">${admin ? 'Recibí plata' : `Envié plata a ${esc(cj.nombre)}`}</button>
+          <button class="btn" data-act="pagarCaja">${admin ? 'Pagué algo' : `${esc(cj.nombre)} pagó algo`}</button>
+          <button class="btn" data-act="otroCaja">Otro movimiento</button></div>
+        <div class="graf" style="margin-top:22px">${grafSaldo(l, c)}</div>
+        <p class="suave" style="font-size:12.5px;margin:6px 0 0">Saldo en el tiempo. Por debajo de la línea, ${esc(cj.nombre)} estaba poniendo de su plata.</p></section>
+      <section class="c s5"><h2>Quién ha enviado</h2>
+        ${Object.entries(entra).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div class="fila"><span>${esc(nom(k))}</span><b class="num entra">${money(v, c)}</b></div>`).join('') || '<p class="suave">Nada aún.</p>'}
+        <h2 style="margin-top:20px">En qué se fue</h2>
+        ${topSale.slice(0, 6).map(([k, v]) => `<div class="fila"><span>${esc(k)}</span><b class="num">${money(v, c)}</b></div>`).join('') || '<p class="suave">Nada aún.</p>'}</section>
+      <section class="c s12"><h2>Movimientos de la caja <span class="eti">${l.length}</span></h2>
+        <div class="cajal">${[...l].reverse().map((m) => `<div class="cajaf" data-mov="${esc(m.id)}" tabindex="0" role="button">
+          <span><span class="cajac">${esc(m.concepto)}</span><small class="suave">${fechaTxt(m.fecha)} · ${esc(m.categoria)}</small></span>
+          <b class="num ${m.efecto > 0 ? 'entra' : ''}">${m.efecto > 0 ? '+' : '−'}${money(Math.abs(m.efecto), c)}</b>
+          <span class="num suave cajas">${money(m.saldo, c)}</span></div>`).join('') || '<p class="suave">Aún no hay movimientos.</p>'}</div></section></div>`;
   },
 };
+
+function vistaAccesos(i) {
+  const roles = [...i.socios.filter((s) => s.id !== 'alejo').map((s) => [`socio:${s.id}`, `Socio · ${s.nombre} (ve y edita todo)`, { rol: 'socio', socio: s.id, nombre: s.nombre }]),
+    ...(i.cajas || []).map((x) => [`administra:${x.id}`, `Administra la caja de ${x.nombre} (ve todo, edita solo su caja)`, { rol: 'administra', caja: x.id, nombre: x.nombre }])];
+  const etiqueta = (a) => (a.rol === 'socio' ? 'Socio' : `Administra la caja`);
+  return `<section class="c s12"><h2>Quién puede entrar</h2>
+    <p class="suave" style="margin-top:0">Tú siempre tienes acceso. Agrega aquí el Gmail de cada persona; sin esto, la app no la deja entrar.</p>
+    ${S.accesos.map((a) => `<div class="fila"><span><b>${esc(a.nombre)}</b> · ${esc(a.email)}<br><small class="suave">${etiqueta(a)}</small></span>
+      <span style="display:flex;gap:6px"><button class="btn sm" data-act="verComo" data-v="${esc(JSON.stringify(a))}">Ver como</button><button class="btn sm peli" data-act="quitarAcceso" data-email="${esc(a.email)}">Quitar</button></span></div>`).join('') || '<p class="suave">Por ahora solo entras tú.</p>'}
+    <form data-act="acceso" class="dos" style="margin-top:14px;align-items:end">
+      <label>Gmail<input name="email" type="email" required placeholder="nombre@gmail.com"></label>
+      <label>Qué puede hacer<select name="rol">${roles.map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join('')}</select></label>
+      <button class="btn pri">Dar acceso</button></form>
+    <p class="suave" style="margin:18px 0 8px">Antes de dar acceso, mira la app como la verá cada uno:</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${roles.map(([, , x]) => `<button class="btn sm" data-act="verComo" data-v="${esc(JSON.stringify(x))}">Ver como ${esc(x.nombre)}</button>`).join('')}</div></section>`;
+}
+
+function quienTxt(m, i) {
+  if (m.cuenta) return `${m.tipo === 'gasto' ? 'Pagó' : 'Llegó a'} la caja de ${nombreCaja(m.cuenta)}`;
+  const nz = Object.entries(m.aportes || {}).filter(([, v]) => v);
+  if (!nz.length) return 'Del aporte del mes';
+  if (nz.length > 1) return 'Mitad y mitad';
+  const n = i.socios.find((s) => s.id === nz[0][0])?.nombre || nz[0][0];
+  return m.tipo === 'ingreso' ? `Lo recibió ${n}` : `Pagó ${n}`;
+}
+
+function grafSaldo(l, c) {
+  if (l.length < 2) return '<p class="suave">Aún no hay suficientes movimientos.</p>';
+  const W = 640, H = 150, v = l.map((m) => m.saldo), hi = Math.max(...v, 0), lo = Math.min(...v, 0), k = (H - 16) / (hi - lo || 1);
+  const x = (n) => (n * (W - 8)) / (l.length - 1), y = (s) => 8 + (hi - s) * k, z = y(0);
+  const d = l.map((m, n) => `${n ? `H${x(n).toFixed(1)}V` : `M0,`}${y(m.saldo).toFixed(1)}`).join('');
+  const anios = l.map((m, n) => (n === 0 || m.fecha.slice(0, 4) !== l[n - 1].fecha.slice(0, 4) ? `<text x="${x(n) + 2}" y="${H + 14}" font-size="11" fill="var(--suave)" font-family="Public Sans">${m.fecha.slice(0, 4)}</text>` : '')).join('');
+  return `<svg viewBox="0 0 ${W} ${H + 20}" role="img" aria-label="Saldo de la caja: hoy ${money(v.at(-1), c)}">
+    <rect x="0" y="${z}" width="${W}" height="${Math.max(H - z, 0)}" fill="var(--sale)" opacity=".07"/>
+    <line x1="0" x2="${W}" y1="${z}" y2="${z}" stroke="var(--suave)" stroke-width="1" stroke-dasharray="3 3"/>
+    <path d="${d}" fill="none" stroke="var(--tinta)" stroke-width="2" stroke-linejoin="round"/>
+    <circle cx="${W - 8}" cy="${y(v.at(-1))}" r="4" fill="var(${v.at(-1) < 0 ? '--sale' : '--entra'})"/>${anios}
+    <text x="${W - 6}" y="${z - 5}" text-anchor="end" font-size="11" fill="var(--suave)" font-family="Public Sans">0</text></svg>`;
+}
 
 const CAMPOS = [
   ['General', [['nombre', 'Nombre'], ['detalle', 'Detalle (torre, apto)'], ['ubicacion', 'Ubicación'], ['moneda', 'Moneda (COP, USD…)'], ['area', 'Área m²', 'n'], ['precioCompra', 'Precio de compra', 'n'], ['valorEstimado', 'Valor estimado hoy', 'n']]],
@@ -491,8 +606,9 @@ const fmtN = (n) => (n || n === 0 ? Number(n).toLocaleString('es-CO', { maximumF
 function poner(o, p, v) { const ks = p.split('.'); ks.slice(0, -1).reduce((a, k) => (a[k] ??= {}), o)[ks.at(-1)] = v; }
 
 function filaMov(m, c, i) {
-  const signo = m.tipo === 'ingreso' ? '+' : m.tipo === 'gasto' ? '−' : '';
-  const chips = Object.entries(m.aportes || {}).filter(([, v]) => v).map(([k, v]) => `<span class="chip ${esc(k)}">${esc(i.socios.find((s) => s.id === k)?.nombre || k)} ${corto(v)}</span>`).join('');
+  const signo = m.tipo === 'ingreso' ? '+' : m.tipo === 'gasto' ? '−' : m.tipo === 'caja' ? (m.sentido === 'sale' ? '−' : '+') : '';
+  const chips = (m.cuenta ? `<span class="chip caja">Caja ${esc(nombreCaja(m.cuenta))}</span>` : '')
+    + Object.entries(m.aportes || {}).filter(([, v]) => v).map(([k, v]) => `<span class="chip ${esc(k)}">${esc(i.socios.find((s) => s.id === k)?.nombre || k)} ${corto(v)}</span>`).join('');
   return `<div class="mov" data-mov="${esc(m.id)}" tabindex="0" role="button"><span>${esc(m.concepto)}</span>
     <span class="val ${m.tipo === 'ingreso' ? 'entra' : m.tipo === 'gasto' ? '' : 'suave'}">${signo}${money(m.valor, c)}</span>
     <small>${fechaTxt(m.fecha)} · ${esc(m.categoria)}${m.nota ? ` · ${esc(m.nota.length > 60 ? m.nota.slice(0, 60) + '…' : m.nota)}` : ''}</small><small style="justify-content:flex-end">${chips}</small></div>`;
@@ -549,51 +665,83 @@ function abrir(html, alEnviar) {
     try { await alEnviar(new FormData(f), f, e.submitter); dlg.close(); }
     catch (err) { b.disabled = false; alert(`No se pudo guardar: ${err.message}`); }
   };
-  dlg.showModal();
-  $('input:not([type=hidden]):not([type=checkbox]):not([type=radio]),select', f)?.focus();
+  if (!dlg.open) dlg.showModal();
+  $('input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not(:disabled),select', f)?.focus();
 }
 const cerrarBtn = '<button type="button" class="btn" data-act="cerrar">Cancelar</button>';
 
+// De quién salió (gasto) o quién recibió (ingreso) un movimiento ya guardado
+function quienDe(m, i) {
+  if (m.cuenta) return 'caja:' + m.cuenta;
+  const nz = Object.entries(m.aportes || {}).filter(([, v]) => v);
+  if (!nz.length) return 'mes';
+  if (nz.length === 1 && Math.abs(nz[0][1]) === m.valor) return nz[0][0];
+  const mi = aportesDe('mitad', m.valor, m.tipo, i.socios);
+  return i.socios.every((s) => Math.abs((m.aportes[s.id] || 0) - mi[s.id]) <= 1) ? 'mitad' : 'igual';
+}
+
 function formMov(m) {
-  const i = inv(), c = i.moneda, nuevo = !m.id;
+  if (m.tipo === 'caja') return formCaja(m);
+  const i = inv(), c = i.moneda, nuevo = !m.id, cajas = i.cajas || [], admin = !esSocio(), editable = nuevo || puede(m);
   m = { tipo: 'gasto', fecha: hoy(), concepto: '', categoria: '', valor: '', nota: '', aportes: {}, ...m };
   const esAbono = m.tipo === 'ajuste' && m.categoria === 'Abono entre socios';
   const de = esAbono ? Object.entries(m.aportes).find(([, v]) => v > 0)?.[0] : null, para = esAbono ? Object.entries(m.aportes).find(([, v]) => v < 0)?.[0] : null;
+  const quien = m.quien || (nuevo ? (m.cuenta ? 'caja:' + m.cuenta : admin ? (m.tipo === 'aporte' ? i.socios[0].id : 'caja:' + miCaja()) : yo().socio || i.socios[0].id) : quienDe(m, i));
+  const destino = m.tipo === 'aporte' ? (m.cuenta ?? (nuevo ? miCaja() || cajas[0]?.id || '' : '')) : '';
+  const op = (v, t) => `<label><input type="radio" name="quien" value="${esc(v)}" ${quien === v ? 'checked' : ''}>${esc(t)}</label>`;
+  const opsCaja = cajas.filter((x) => !admin || x.id === miCaja()).map((x) => op('caja:' + x.id, `Caja de ${x.nombre}`)).join('');
+  const opsSocios = admin && m.tipo !== 'aporte' ? '' : i.socios.map((s) => op(s.id, s.nombre)).join('');
+  const legado = (quien === 'mes' ? op('mes', 'Incluido en el aporte del mes') : '') + (quien === 'igual' ? op('igual', 'Como está registrado') : '');
+  const pregunta = { gasto: ['¿Quién pagó?', opsSocios + opsCaja + (admin ? '' : op('mitad', 'Mitad y mitad')) + legado],
+    ingreso: ['¿Quién lo recibió?', opsSocios + opsCaja + legado],
+    aporte: ['¿Quién envió la plata?', opsSocios + (destino ? op('otro', 'Otra persona (arrendatario…)') : '') + (quien === 'mitad' ? op('mitad', 'Mitad y mitad') : '') + legado] }[m.tipo];
+  const tipos = admin ? [] : ['gasto', 'ingreso', 'aporte'];
+  const titulo = !editable ? 'Detalle' : nuevo ? (esAbono ? 'Abono entre socios' : m.tipo === 'aporte' ? (destino ? `Plata para la caja de ${nombreCaja(destino)}` : 'Envío de plata') : m.tipo === 'ingreso' ? 'Nuevo ingreso' : 'Nuevo pago') : 'Editar movimiento';
   abrir(`<form>
-    <h2>${nuevo ? (esAbono ? 'Abono entre socios' : 'Nuevo movimiento') : 'Editar movimiento'}</h2>
-    ${m.tipo === 'ajuste' ? '<input type="hidden" name="tipo" value="ajuste">' : `<div class="segm" role="radiogroup" aria-label="Tipo">${['gasto', 'ingreso', 'aporte'].map((k) => `<label><input type="radio" name="tipo" value="${k}" ${m.tipo === k ? 'checked' : ''}>${TIPOS[k]}</label>`).join('')}</div>`}
+    <h2>${titulo}</h2>
+    <fieldset ${editable ? '' : 'disabled'} style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:14px;min-width:0">
+    ${m.tipo === 'ajuste' || !tipos.length || !nuevo ? `<input type="hidden" name="tipo" value="${esc(m.tipo)}">` : `<div class="segm" role="radiogroup" aria-label="Tipo">${tipos.map((k) => `<label><input type="radio" name="tipo" value="${k}" ${m.tipo === k ? 'checked' : ''}>${{ gasto: 'Pago', ingreso: 'Ingreso', aporte: 'Envío de plata' }[k]}</label>`).join('')}</div>`}
     <div class="dos"><label>Fecha<input type="date" name="fecha" value="${esc(m.fecha)}" required></label>
       <label>Valor<input name="valor" inputmode="decimal" required value="${esc(fmtN(m.valor))}" placeholder="0"></label></div>
-    <label>Concepto<input name="concepto" required value="${esc(m.concepto)}" placeholder="${esAbono ? 'Abono para igualar' : 'Ej. Arreglo de la ducha'}"></label>
+    <label>Concepto<input name="concepto" required value="${esc(m.concepto)}" placeholder="${esAbono ? 'Abono para igualar' : m.tipo === 'aporte' ? 'Ej. Envío para la admon' : 'Ej. Arreglo de la ducha'}"></label>
     ${esAbono ? `<div class="dos"><label>Quién paga<select name="de">${i.socios.map((s) => `<option value="${esc(s.id)}" ${s.id === de ? 'selected' : ''}>${esc(s.nombre)}</option>`).join('')}</select></label>
       <label>A quién<select name="para">${i.socios.map((s, k) => `<option value="${esc(s.id)}" ${s.id === para || (!para && k === 1) ? 'selected' : ''}>${esc(s.nombre)}</option>`).join('')}</select></label></div>
       <input type="hidden" name="categoria" value="${esc(m.categoria || 'Abono entre socios')}">`
-    : `<label>Categoría<input name="categoria" list="cats" value="${esc(m.categoria)}" placeholder="Elige o escribe una"></label>
-      <datalist id="cats">${Object.values(CATEGORIAS).flat().map((x) => `<option value="${esc(x)}">`).join('')}</datalist>
-      <fieldset style="border:1px solid var(--linea);border-radius:12px;padding:12px 14px;margin:0"><legend class="eti">¿Quién puso el dinero?</legend>
-        <p class="suave" style="font-size:13px;margin:0 0 10px">Déjalo en 0 si salió del arriendo o de lo que ya pusieron en el mes.</p>
-        <div class="segm" style="margin-bottom:10px"><button type="button" class="btn sm" data-reparto="mitad">Mitad y mitad</button>${i.socios.map((s) => `<button type="button" class="btn sm" data-reparto="${esc(s.id)}">Todo ${esc(s.nombre)}</button>`).join('')}<button type="button" class="btn sm" data-reparto="0">Del arriendo</button></div>
-        <div class="dos">${i.socios.map((s) => `<label>${esc(s.nombre)}<input name="ap.${esc(s.id)}" inputmode="decimal" value="${esc(fmtN(m.aportes[s.id] || 0))}"></label>`).join('')}</div></fieldset>`}
-    <label>Nota<textarea name="nota" rows="2" placeholder="Opcional">${esc(m.nota)}</textarea></label>
-    <div class="acc">${nuevo ? '<span></span>' : '<button type="button" class="btn peli" data-act="borrarMov">Borrar</button>'}<div>${cerrarBtn}<button class="btn pri">${nuevo ? 'Guardar' : 'Guardar cambios'}</button></div></div></form>`,
+    : `${m.tipo === 'aporte' ? `<input type="hidden" name="categoria" value="${esc(m.categoria || 'Aporte socios')}">` : `<label>Categoría<input name="categoria" list="cats" value="${esc(m.categoria)}" placeholder="Elige o escribe una"></label>
+      <datalist id="cats">${(CATEGORIAS[m.tipo] || []).map((x) => `<option value="${esc(x)}">`).join('')}</datalist>`}
+      <div><div class="eti" style="margin-bottom:8px">${pregunta[0]}</div><div class="segm" role="radiogroup" aria-label="${esc(pregunta[0])}">${pregunta[1]}</div></div>
+      ${m.tipo === 'aporte' && !admin && cajas.length ? `<label>¿A dónde llegó?<select name="destino"><option value="">Directo al apto (no pasa por una caja)</option>${cajas.map((x) => `<option value="${esc(x.id)}" ${destino === x.id ? 'selected' : ''}>Caja de ${esc(x.nombre)}</option>`).join('')}</select></label>`
+        : `<input type="hidden" name="destino" value="${esc(destino)}">`}`}
+    <label>Nota<textarea name="nota" rows="2" placeholder="Opcional">${esc(m.nota)}</textarea></label></fieldset>
+    <div class="acc">${nuevo || !editable ? '<span></span>' : '<button type="button" class="btn peli" data-act="borrarMov">Borrar</button>'}<div>${editable ? `${cerrarBtn}<button class="btn pri">${nuevo ? 'Guardar' : 'Guardar cambios'}</button>` : '<button type="button" class="btn" data-act="cerrar">Cerrar</button>'}</div></div></form>`,
   async (fd) => {
-    const valor = leerValor(fd.get('valor'), c), tipo = fd.get('tipo');
+    const valor = leerValor(fd.get('valor')), q = fd.get('quien');
+    let tipo = fd.get('tipo'), cuenta = null, aportes = {};
     if (valor <= 0) throw new Error('El valor debe ser mayor a 0.');
-    let aportes = {};
     if (esAbono) {
       if (fd.get('de') === fd.get('para')) throw new Error('Quién paga y a quién deben ser socios distintos.');
       aportes = { [fd.get('de')]: valor, [fd.get('para')]: -valor };
-    } else i.socios.forEach((s) => { const v = leerValor(fd.get('ap.' + s.id), c); if (v) aportes[s.id] = v; });
-    if (tipo === 'aporte' && !Object.keys(aportes).length) throw new Error('Indica cuánto puso cada socio.');
-    await api.guardarMov({ ...m, id: m.id || nuevoId(), tipo, fecha: fd.get('fecha'), valor, concepto: fd.get('concepto').trim(),
-      categoria: (fd.get('categoria') || '').trim() || (CATEGORIAS[tipo]?.at(-1) ?? 'Otros'), nota: fd.get('nota').trim(), aportes });
+    } else {
+      if (!q) throw new Error(`Elige: ${pregunta[0].toLowerCase()}`);
+      if (tipo === 'aporte') {
+        cuenta = fd.get('destino') || null;
+        if (q === 'otro') tipo = 'ingreso';
+        else aportes = q === 'igual' ? m.aportes : aportesDe(q, valor, 'aporte', i.socios);
+      } else if (q.startsWith('caja:')) cuenta = q.slice(5);
+      else if (q === 'igual') aportes = m.aportes;
+      else if (q !== 'mes') aportes = aportesDe(q, valor, tipo, i.socios);
+    }
+    const { cuenta: _c, quien: _q, de: _d, ...resto } = m;
+    await api.guardarMov({ ...resto, id: m.id || nuevoId(), tipo, fecha: fd.get('fecha'), valor, concepto: fd.get('concepto').trim(),
+      categoria: (fd.get('categoria') || '').trim() || (tipo === 'ingreso' ? 'Otros ingresos' : CATEGORIAS[tipo]?.at(-1) ?? 'Otros'),
+      nota: fd.get('nota').trim(), aportes, ...(cuenta ? { cuenta } : {}) });
   });
   const f = $('form', dlg);
-  f.addEventListener('click', (e) => {
-    const r = e.target.dataset.reparto;
-    if (r === undefined) return;
-    const v = leerValor(f.valor.value, c);
-    i.socios.forEach((s) => (f['ap.' + s.id].value = fmtN(r === 'mitad' ? Math.round((v * s.pct) / 100) : r === s.id ? v : 0)));
+  // Al cambiar el tipo cambian las preguntas: se redibuja con lo ya escrito
+  f.addEventListener('change', (e) => {
+    if (e.target.name !== 'tipo') return;
+    const fd = new FormData(f);
+    formMov({ ...m, tipo: e.target.value, quien: undefined, cuenta: undefined, categoria: '', fecha: fd.get('fecha'), valor: leerValor(fd.get('valor')) || '', concepto: fd.get('concepto'), nota: fd.get('nota') });
   });
   $('[data-act=borrarMov]', f)?.addEventListener('click', async () => {
     if (!confirm(`¿Borrar "${m.concepto}"? No se puede deshacer.`)) return;
@@ -601,57 +749,28 @@ function formMov(m) {
   });
 }
 
-function formMes() {
-  const i = inv(), c = i.moneda, ahora = ym(hoy()), k = S.movs.some((m) => ym(m.fecha) === ahora) ? sumarMeses(ahora, 1) : ahora;
-  const lineas = [...(i.fijos || []).map((f) => ({ ...f })),
-    ...(i.compromisos || []).filter((x) => x.pagadas < x.cuotas).map((x) => ({ concepto: `${x.nombre} · cuota ${x.pagadas + 1} de ${x.cuotas}`, tipo: 'gasto', categoria: x.categoria || 'Otros gastos', valor: x.valorCuota, compromiso: x.id }))];
-  const fila = (l, n) => `<div class="linea-mes"><input type="checkbox" name="usa.${n}" checked aria-label="Incluir">
-    ${l.libre ? `<input name="con.${n}" placeholder="Concepto (imprevisto)">` : `<span>${l.tipo === 'ingreso' ? '<b class="entra">+</b> ' : ''}${esc(l.concepto)}</span>`}
-    <input name="val.${n}" inputmode="numeric" value="${fmtN(l.valor)}" aria-label="Valor"></div>`;
-  abrir(`<form><h2>Registrar mes</h2>
-    <label>Mes<input type="month" name="mes" value="${k}" required></label>
-    <p class="suave" style="margin:0;font-size:13px" id="yaHay"></p>
-    <div id="lineas" style="display:flex;flex-direction:column;gap:10px">${lineas.map(fila).join('')}</div>
-    <button type="button" class="btn sm" data-act="linea" style="align-self:flex-start">+ Pago extra o imprevisto</button>
-    <div class="total" id="tot"></div>
-    <div class="dos">${i.socios.map((s) => `<label>Pone ${esc(s.nombre)}<input name="ap.${esc(s.id)}" inputmode="numeric"></label>`).join('')}</div>
-    <div class="acc"><span></span><div>${cerrarBtn}<button class="btn pri">Guardar mes</button></div></div></form>`,
+// Movimientos que solo mueven la caja (envíos viejos, abonos a quien la maneja, saldo inicial)
+function formCaja(m) {
+  const i = inv(), nuevo = !m.id, editable = nuevo || puede(m);
+  m = { fecha: hoy(), concepto: '', categoria: 'Pago a Yaneth', valor: '', nota: '', sentido: 'sale', aportes: {}, cuenta: miCaja() || i.cajas?.[0]?.id, ...m, tipo: 'caja' };
+  abrir(`<form><h2>${editable ? (nuevo ? 'Otro movimiento de la caja' : 'Editar movimiento de caja') : 'Detalle'}</h2>
+    <fieldset ${editable ? '' : 'disabled'} style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:14px;min-width:0">
+    <p class="suave" style="margin:0;font-size:13px">Para plata que entra o sale de la caja de ${esc(nombreCaja(m.cuenta))} sin ser un pago del apto (por ejemplo, un abono a ${esc(nombreCaja(m.cuenta))}).</p>
+    <div class="segm" role="radiogroup" aria-label="Sentido"><label><input type="radio" name="sentido" value="entra" ${m.sentido === 'entra' ? 'checked' : ''}>Entra a la caja</label><label><input type="radio" name="sentido" value="sale" ${m.sentido === 'sale' ? 'checked' : ''}>Sale de la caja</label></div>
+    <div class="dos"><label>Fecha<input type="date" name="fecha" value="${esc(m.fecha)}" required></label><label>Valor<input name="valor" inputmode="decimal" required value="${esc(fmtN(m.valor))}"></label></div>
+    <label>Concepto<input name="concepto" required value="${esc(m.concepto)}" placeholder="Ej. Abono a Yaneth"></label>
+    <label>Categoría<select name="categoria">${[...new Set([m.categoria, ...CATEGORIAS.caja])].map((x) => `<option ${x === m.categoria ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
+    <label>Nota<textarea name="nota" rows="2">${esc(m.nota)}</textarea></label></fieldset>
+    <div class="acc">${nuevo || !editable ? '<span></span>' : '<button type="button" class="btn peli" data-act="borrarMov">Borrar</button>'}<div>${editable ? `${cerrarBtn}<button class="btn pri">Guardar</button>` : '<button type="button" class="btn" data-act="cerrar">Cerrar</button>'}</div></div></form>`,
   async (fd) => {
-    const mes = fd.get('mes'), fecha = `${mes}-01`, movs = [];
-    let ingresos = 0, gastos = 0;
-    lineas.forEach((l, n) => {
-      if (!fd.get('usa.' + n)) return;
-      const valor = leerValor(fd.get('val.' + n), c), concepto = l.libre ? (fd.get('con.' + n) || '').trim() : l.concepto;
-      if (!valor || !concepto) return;
-      l.tipo === 'ingreso' ? (ingresos += valor) : (gastos += valor);
-      movs.push({ id: nuevoId() + n, fecha, tipo: l.tipo, categoria: l.categoria, concepto, valor, nota: l.libre ? 'Imprevisto' : '', aportes: {} });
-    });
-    const aportes = {};
-    i.socios.forEach((s) => { const v = leerValor(fd.get('ap.' + s.id), c); if (v) aportes[s.id] = v; });
-    const suma = Object.values(aportes).reduce((a, b) => a + b, 0);
-    if (suma) movs.push({ id: nuevoId() + 'ap', fecha, tipo: 'aporte', categoria: 'Aporte socios', concepto: 'Aporte del mes', valor: suma, nota: '', aportes });
-    if (!movs.length) throw new Error('No hay nada para guardar.');
-    await api.guardarMovs(movs);
-    const usados = new Set(lineas.filter((l, n) => l.compromiso && fd.get('usa.' + n)).map((l) => l.compromiso));
-    if (usados.size) await api.guardarInv({ ...i, compromisos: i.compromisos.map((x) => (usados.has(x.id) ? { ...x, pagadas: x.pagadas + 1 } : x)) });
+    const valor = leerValor(fd.get('valor'));
+    if (valor <= 0) throw new Error('El valor debe ser mayor a 0.');
+    await api.guardarMov({ ...m, id: m.id || nuevoId(), fecha: fd.get('fecha'), valor, concepto: fd.get('concepto').trim(), categoria: fd.get('categoria'), sentido: fd.get('sentido'), nota: fd.get('nota').trim() });
   });
-  const f = $('form', dlg);
-  const calcular = () => {
-    let ing = 0, gas = 0;
-    lineas.forEach((l, n) => { if (!f['usa.' + n]?.checked) return; const v = leerValor(f['val.' + n].value, c); l.tipo === 'ingreso' ? (ing += v) : (gas += v); });
-    const falta = Math.max(gas - ing, 0);
-    $('#tot', f).innerHTML = `<div class="fila"><span>Ingresos</span><b class="num entra">${money(ing, c)}</b></div><div class="fila"><span>Gastos</span><b class="num sale">${money(gas, c)}</b></div><div class="fila"><b>Les toca poner</b><b class="num">${money(falta, c)}</b></div>`;
-    if (!f.dataset.tocado) i.socios.forEach((s) => (f['ap.' + s.id].value = fmtN(Math.round((falta * s.pct) / 100))));
-    const n = S.movs.filter((m) => ym(m.fecha) === f.mes.value).length;
-    $('#yaHay', f).innerHTML = n ? `<span style="color:var(--aviso)">Este mes ya tiene ${n} movimientos registrados.</span>` : '';
-  };
-  f.addEventListener('input', (e) => { if (e.target.name?.startsWith('ap.')) f.dataset.tocado = 1; calcular(); });
-  $('[data-act=linea]', f).onclick = () => {
-    const n = lineas.push({ libre: true, tipo: 'gasto', categoria: 'Mantenimiento y arreglos', valor: '' }) - 1;
-    $('#lineas', f).insertAdjacentHTML('beforeend', fila(lineas[n], n));
-    f['con.' + n].focus();
-  };
-  calcular();
+  $('[data-act=borrarMov]', dlg)?.addEventListener('click', async () => {
+    if (!confirm(`¿Borrar "${m.concepto}"? No se puede deshacer.`)) return;
+    await api.borrarMov(m.id); dlg.close();
+  });
 }
 
 function formRecordatorio(id) {
@@ -689,23 +808,34 @@ function formNuevaInv() {
 }
 
 function menuMas() {
+  const cj = inv().cajas?.[0], n = cj ? esc(cj.nombre) : '';
+  const ops = esSocio()
+    ? [['gasto', 'Registrar un pago', 'Admon, cuota, arreglos, imprevistos'], ['ingreso', 'Registrar un ingreso', 'Arriendo u otro'],
+       ...(cj ? [['envio', `Envié plata a ${n}`, 'Para que pague cosas del apto']] : []), ['abono', 'Abono entre socios', ''], ['rec', 'Recordatorio', '']]
+    : [['envio', 'Recibí plata', 'De Sebas, de Alejo o de otra persona'], ['pagoCaja', 'Pagué algo', 'Con la plata de la caja o la tuya'], ['otroCaja', 'Otro movimiento de la caja', 'Por ejemplo, un abono para ti'], ['rec', 'Recordatorio', '']];
   abrir(`<form><h2>Registrar</h2>
-    <button type="button" class="btn pri" data-op="mes" style="text-align:left">Pagos del mes<br><small style="font-weight:400;opacity:.8">Arriendo, administración, cuota y lo que cada uno pone</small></button>
-    <button type="button" class="btn" data-op="gasto" style="text-align:left">Pago extra o imprevisto</button>
-    <button type="button" class="btn" data-op="ingreso" style="text-align:left">Otro ingreso</button>
-    <button type="button" class="btn" data-op="abono" style="text-align:left">Abono entre socios</button>
-    <button type="button" class="btn" data-op="rec" style="text-align:left">Recordatorio</button>
+    ${ops.map(([k, t, d], j) => `<button type="button" class="btn ${j ? '' : 'pri'}" data-op="${k}" style="text-align:left">${t}${d ? `<br><small style="font-weight:400;opacity:.8">${d}</small>` : ''}</button>`).join('')}
     <div class="acc"><span></span><div>${cerrarBtn}</div></div></form>`, async () => {});
   $('form', dlg).addEventListener('click', (e) => {
     const op = e.target.closest('[data-op]')?.dataset.op;
     if (!op) return;
     dlg.close();
-    ({ mes: formMes, gasto: () => formMov({ tipo: 'gasto' }), ingreso: () => formMov({ tipo: 'ingreso', categoria: 'Otros ingresos' }), abono: () => formMov({ tipo: 'ajuste' }), rec: () => formRecordatorio() })[op]();
+    ({ gasto: () => formMov({ tipo: 'gasto' }), ingreso: () => formMov({ tipo: 'ingreso', categoria: 'Arriendo' }), envio: () => formMov({ tipo: 'aporte', cuenta: cj?.id }),
+       pagoCaja: () => formMov({ tipo: 'gasto', cuenta: cj?.id }), otroCaja: () => formCaja({}), abono: () => formMov({ tipo: 'ajuste', categoria: 'Abono entre socios' }), rec: () => formRecordatorio() })[op]();
   });
 }
 
 async function importarArchivo(file) {
   const data = JSON.parse(await file.text());
+  if (data.tipo === 'parche') {
+    const x = S.invs[data.inversion];
+    if (!x || !Array.isArray(data.movimientos)) throw new Error('Primero importa el historial de esa inversión.');
+    if (!confirm(`${data.descripcion}.\n\nSe actualizan ${data.movimientos.length} movimientos del historial. Lo que hayas agregado tú no se toca. ¿Aplicar?`)) return;
+    elegirInv(x.id);
+    await api.guardarInv({ ...x, ...data.set });
+    await api.guardarMovs(data.movimientos);
+    S.tab = 'caja'; render(); return alert('Listo. Revisa la caja y los movimientos.');
+  }
   if (!data.inversion?.id || !Array.isArray(data.movimientos)) throw new Error('El archivo no tiene el formato de historial.');
   if (S.invs[data.inversion.id] && !confirm(`"${data.inversion.nombre}" ya existe. ¿Reemplazar sus datos con los del archivo? Los movimientos con el mismo id se sobrescriben.`)) return;
   await api.importar(data);
@@ -729,8 +859,18 @@ document.addEventListener('click', async (e) => {
     else if (act === 'salir') { e.preventDefault(); await api.salir(); }
     else if (act === 'cerrar') dlg.close();
     else if (act === 'menuMas') menuMas();
-    else if (act === 'registrarMes') formMes();
-    else if (act === 'abono') formMov({ tipo: 'ajuste' });
+    else if (act === 'fijo') {
+      const it = estadoMes(inv(), S.movs, ym(hoy())).items[+t.dataset.n], x = inv().compromisos?.find((c) => c.id === it.compromiso);
+      formMov({ tipo: it.tipo, categoria: it.categoria, valor: it.valor, compromiso: it.compromiso,
+        concepto: x ? `${x.nombre} · cuota ${cuotasPagadas(x, S.movs) + 1}` : it.concepto });
+    }
+    else if (act === 'nuevoPago') formMov({ tipo: 'gasto', categoria: 'Mantenimiento y arreglos' });
+    else if (act === 'recibir') formMov({ tipo: 'aporte', cuenta: inv().cajas[0].id });
+    else if (act === 'pagarCaja') formMov({ tipo: 'gasto', cuenta: inv().cajas[0].id });
+    else if (act === 'otroCaja') formCaja({ cuenta: inv().cajas[0].id });
+    else if (act === 'verComo') { S.verComo = t.dataset.v ? JSON.parse(t.dataset.v) : null; S.tab = S.verComo?.rol === 'administra' ? 'caja' : 'resumen'; render(); scrollTo(0, 0); }
+    else if (act === 'quitarAcceso') { if (confirm(`¿Quitarle el acceso a ${t.dataset.email}?`)) await api.borrarAcceso(t.dataset.email); }
+    else if (act === 'abono') formMov({ tipo: 'ajuste', categoria: 'Abono entre socios' });
     else if (act === 'recordatorio') formRecordatorio(t.dataset.id);
     else if (act === 'nuevaInv') formNuevaInv();
     else if (act === 'exportar') exportar();
@@ -743,10 +883,10 @@ document.addEventListener('click', async (e) => {
     else if (act === 'addContrato') await api.guardarInv({ ...inv(), contrato: { inicio: hoy(), meses: 12, canon: 0, diaPago: '5 al 10', deposito: 0, modalidad: 'Directo' } });
   } catch (err) { alert(err.message); }
 });
-document.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.mov')) { e.preventDefault(); e.target.click(); } });
+document.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.mov,.cajaf')) { e.preventDefault(); e.target.click(); } });
 document.addEventListener('change', async (e) => {
   const t = e.target;
-  if (t.dataset.f) { S.f[t.dataset.f] = t.value; render(); }
+  if (t.dataset.f && t.dataset.f !== 'q') { S.f[t.dataset.f] = t.value; render(); } // la búsqueda ya se maneja en 'input'
   else if (t.dataset.act === 'inv') { elegirInv(t.value); render(); }
   else if (t.dataset.act === 'importar' && t.files[0]) { try { await importarArchivo(t.files[0]); } catch (err) { alert(err.message); } t.value = ''; }
 });
@@ -760,6 +900,15 @@ document.addEventListener('input', (e) => {
   }
 });
 document.addEventListener('submit', async (e) => {
+  if (e.target.dataset.act === 'acceso') {
+    e.preventDefault();
+    const fd = new FormData(e.target), email = fd.get('email').trim().toLowerCase(), [rol, id] = fd.get('rol').split(':'), i = inv();
+    const nombre = rol === 'socio' ? i.socios.find((s) => s.id === id).nombre : nombreCaja(id);
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return alert('Revisa el correo.');
+    try { await api.guardarAcceso(email, rol === 'socio' ? { rol, socio: id, nombre } : { rol, caja: id, nombre }); }
+    catch (err) { alert(`No se pudo guardar: ${err.message}`); }
+    return;
+  }
   if (e.target.dataset.act !== 'datos') return;
   e.preventDefault();
   const i = structuredClone(inv()), fd = new FormData(e.target), c = i.moneda;
