@@ -44,7 +44,8 @@ export function leerValor(s) {
 export const norm = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 // Compra = cuota inicial y escrituración; lo demás es el mes a mes
-export const esCompra = (i) => (m) => m.categoria === 'Compra' || (m.categoria === 'Trámites' && m.fecha < (i.credito?.desembolso || '9999'));
+// Compra = cuota inicial, escrituración y los abonos entre socios que pagan esa deuda; lo demás es el mes a mes
+export const esCompra = (i) => (m) => m.categoria === 'Compra' || m.categoria === 'Abono entre socios' || (m.categoria === 'Trámites' && m.fecha < (i.credito?.desembolso || '9999'));
 
 // Caja = plata que alguien maneja por los socios (p. ej. Yaneth). Saldo negativo = esa persona les prestó.
 export function efectoCaja(m) {
@@ -89,8 +90,24 @@ export function estadoMes(i, movs, k) {
   const extra = del.filter((m) => !usados.has(m) && (m.tipo === 'gasto' || m.tipo === 'ingreso'));
   const signo = (t) => (t === 'ingreso' ? -1 : 1);
   const neto = items.reduce((a, it) => a + signo(it.tipo) * (it.hecho?.valor ?? it.valor), 0) + extra.reduce((a, m) => a + signo(m.tipo) * m.valor, 0);
-  const puso = (id) => del.reduce((a, m) => a + (+m.aportes?.[id] || 0), 0);
-  return { items, extra, neto, socios: i.socios.map((s) => ({ ...s, toca: (neto * s.pct) / 100, puso: puso(s.id) })) };
+  const previo = arrastre(i, movs, k);
+  return { items, extra, neto, estimado: items.some((it) => !it.hecho), pendientes: items.filter((it) => !it.hecho),
+    socios: i.socios.map((s) => {
+      const toca = (neto * s.pct) / 100, puesto = puso(del, s.id);
+      return { ...s, toca, puso: puesto, previo: previo[s.id], falta: toca + previo[s.id] - puesto };
+    }) };
+}
+
+// Lo que cada socio puso este mes: pagos directos y envíos, menos lo que recibió. Abonos entre socios y ajustes no cuentan.
+const puso = (l, id) => l.reduce((a, m) => a + (m.tipo === 'ajuste' || m.tipo === 'caja' ? 0 : +m.aportes?.[id] || 0), 0);
+
+// Lo que le quedó faltando (+) o puso de más (−) a cada socio en los meses anteriores a k.
+// Cuenta desde el primer mes en que se registra quién pagó cada cosa; antes el cuadre venía del Excel por mitades.
+export function arrastre(i, movs, k) {
+  const desde = i.cuadreDesde || '2026-11';
+  const l = movs.filter((m) => ym(m.fecha) >= desde && ym(m.fecha) < k);
+  const neto = l.reduce((a, m) => a + (m.tipo === 'gasto' ? m.valor : m.tipo === 'ingreso' ? -m.valor : 0), 0);
+  return Object.fromEntries(i.socios.map((s) => [s.id, (neto * s.pct) / 100 - puso(l, s.id)]));
 }
 
 export const tasaMes =(ea) => Math.pow(1 + ea / 100, 1 / 12) - 1;

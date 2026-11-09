@@ -160,6 +160,16 @@ input,select,textarea{border:1px solid var(--linea);border-radius:10px;padding:1
 .rastro ul{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}
 .rastro li{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
 
+.pone-bloque{margin-top:6px;padding-top:16px;border-top:1px solid var(--linea)}
+.pone-cab{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.chip.est{background:color-mix(in srgb,var(--aviso) 16%,transparent);color:var(--aviso)}
+.chip.fin{background:color-mix(in srgb,var(--entra) 14%,transparent);color:var(--entra)}
+.pone{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--linea)}
+.pone small{display:block;font-size:12.5px;margin-top:2px;line-height:1.35}
+.pone-v{text-align:right;white-space:nowrap}
+.pone-v b{font-size:20px;font-stretch:115%}
+.guia{margin-top:12px;background:var(--papel);border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.5}
+
 /* login */
 .login{min-height:100vh;display:grid;place-items:center;padding:24px}
 .login .c{max-width:420px;text-align:left}
@@ -468,7 +478,7 @@ const VISTAS = {
         </div></section>`;
     }
     const k = ym(hoy()), em = estadoMes(i, S.movs, k), listos = em.items.filter((it) => it.hecho).length;
-    const ec = esCompra(i), qc = cuadre(i.socios, S.movs.filter(ec)), qm = cuadre(i.socios, S.movs.filter((m) => !ec(m)));
+    const ec = esCompra(i), qc = cuadre(i.socios, S.movs.filter(ec));
     const deudor = qc.socios.filter((s) => s.dif < -1).sort((a, b) => a.dif - b.dif)[0], acreedor = qc.socios.filter((s) => s.dif > 1).sort((a, b) => b.dif - a.dif)[0];
     const prox = agenda(i).slice(0, 4);
     return `<div class="rejilla">${firma}
@@ -478,14 +488,10 @@ const VISTAS = {
           ${it.hecho ? `<b class="num ${it.tipo === 'ingreso' ? 'entra' : ''}">${it.tipo === 'ingreso' ? '+' : ''}${money(it.hecho.valor, c)}</b>` : `<button class="btn sm" data-act="fijo" data-n="${n}">Registrar</button>`}</div>`).join('')}
         ${em.extra.map((m) => `<div class="pend ok" data-mov="${esc(m.id)}" style="cursor:pointer"><span class="marca-p" aria-hidden="true">✓</span><span>${esc(m.concepto)}<br><small class="suave">${fechaTxt(m.fecha)} · ${esc(quienTxt(m, i))}</small></span><b class="num ${m.tipo === 'ingreso' ? 'entra' : ''}">${m.tipo === 'ingreso' ? '+' : ''}${money(m.valor, c)}</b></div>`).join('')}
         <p style="margin:12px 0 18px"><button class="btn sm" data-act="nuevoPago">+ Pago extra o imprevisto</button></p>
-        <div class="eti" style="margin-bottom:8px">Cada uno · ${money(em.neto, c)} entre los dos este mes</div>
-        ${em.socios.map((s) => { const falta = s.toca - s.puso; return `<div class="fila"><span><b style="color:var(--${esc(s.id)},var(--alejo))">${esc(s.nombre)}</b> <small class="suave">ha puesto ${money(s.puso, c)} de ${money(s.toca, c)}</small></span>
-          <b class="num ${falta > 1 ? 'sale' : 'entra'}">${falta > 1 ? `Falta ${money(falta, c)}` : falta < -1 ? `+${money(-falta, c)}` : 'Al día'}</b></div>`; }).join('')}
-        <p class="suave" style="font-size:12.5px;margin:8px 0 0">Cuenta lo que cada uno paga directo o envía a la caja, menos lo que recibe del arriendo.</p></section>
+        ${bloquePago(i, em, c)}</section>
       <section class="c s5"><h2>Cuadre entre socios <a href="#" data-tab="socios" class="eti">ver detalle</a></h2>
         ${deudor && acreedor ? `<span class="eti">Compra</span><div class="big num">${money(-deudor.dif, c)}</div><p class="suave" style="margin:6px 0 14px">le falta poner a <b style="color:var(--${esc(deudor.id)})">${esc(deudor.nombre)}</b> de la compra para quedar ${deudor.pct}/${acreedor.pct}</p>`
         : `<div class="big">Compra al día</div><p class="suave">Cada uno puso lo que le toca en la compra.</p>`}
-        ${(() => { const d = qm.socios.filter((s) => s.dif < -1).sort((a, b) => a.dif - b.dif)[0]; return `<div class="fila" style="margin-bottom:12px"><span>Mes a mes</span><b class="num ${d ? 'sale' : 'entra'}">${d ? `${esc(d.nombre)} debe ${money(-d.dif, c)}` : 'Al día'}</b></div>`; })()}
         <div class="barra" aria-hidden="true">${q.socios.map((s) => `<i style="width:${(s.puesto / q.total) * 100}%;background:var(--${esc(s.id)},var(--alejo))"></i>`).join('')}</div>
         <div class="leyenda">${q.socios.map((s) => `<span style="--k:var(--${esc(s.id)},var(--alejo))">${esc(s.nombre)} ha puesto ${corto(s.puesto)} (${pct(s.puesto / q.total, 0)})</span>`).join('')}</div></section>
       <section class="c s8 graf"><h2>Flujo mensual · arriendo menos gastos</h2>${grafFlujo(meses, keys.slice(-24), c)}
@@ -567,7 +573,7 @@ const VISTAS = {
 
   socios(i) {
     const c = i.moneda, ec = esCompra(i);
-    const q = cuadre(i.socios, S.movs), qc = cuadre(i.socios, S.movs.filter(ec)), qm = cuadre(i.socios, S.movs.filter((m) => !ec(m)));
+    const q = cuadre(i.socios, S.movs), qc = cuadre(i.socios, S.movs.filter(ec)), qm = cuadre(i.socios, S.movs.filter((m) => !ec(m))), em = estadoMes(i, S.movs, ym(hoy()));
     const abonos = S.movs.filter((m) => m.tipo === 'ajuste' && m.categoria !== 'Fuera de la inversión').sort((a, b) => b.fecha.localeCompare(a.fecha));
     const deudor = qc.socios.filter((s) => s.dif < -1).sort((a, b) => a.dif - b.dif)[0];
     const dif = (d) => `<b class="num ${d >= -1 ? 'entra' : 'sale'}">${Math.abs(d) <= 1 ? 'Al día' : `${d > 0 ? 'Puso de más' : 'Le falta'} ${money(Math.abs(d), c)}`}</b>`;
@@ -578,7 +584,7 @@ const VISTAS = {
           <div class="fila"><span>En la compra (cuota inicial y escrituración)</span><b class="num">${money(sc.puesto, c)}</b></div>
           <div class="fila"><span>Cuadre de la compra</span>${dif(sc.dif)}</div>
           <div class="fila"><span>Mes a mes desde la entrega</span><b class="num">${money(sm.puesto, c)}</b></div>
-          <div class="fila"><span>Cuadre mes a mes</span>${dif(sm.dif)}</div></section>`;
+          <div class="fila"><span>Este mes, con lo pendiente</span>${dif(-em.socios.find((x) => x.id === s.id).falta)}</div></section>`;
       }).join('')}
       <section class="c s12"><h2>Abonos y cuadres <button class="btn sm" data-act="abono">Registrar abono</button></h2>
         ${deudor ? `<p class="suave" style="margin-top:0">Cada abono de ${esc(deudor.nombre)} baja la diferencia. Cuando llegue a cero, quedan ${i.socios.map((s) => s.pct).join('/')}.</p>` : ''}
@@ -674,6 +680,31 @@ function vistaAccesos(i) {
       <button class="btn pri">Dar acceso</button></form>
     <p class="suave" style="margin:18px 0 8px">Antes de dar acceso, mira la app como la verá cada uno:</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">${roles.map(([, , x]) => `<button class="btn sm" data-act="verComo" data-v="${esc(JSON.stringify(x))}">Ver como ${esc(x.nombre)}</button>`).join('')}</div></section>`;
+}
+
+// Cuánto pone cada socio este mes, con lo pendiente de meses anteriores y a quién enviarlo
+function bloquePago(i, em, c) {
+  const cj = i.cajas?.[0], saldo = cj ? Math.round(movsCaja(S.movs, cj.id).at(-1)?.saldo || 0) : 0, r = Math.round;
+  const faltan = em.socios.filter((s) => r(s.falta) > 0), demas = em.socios.filter((s) => r(s.falta) < 0);
+  const lista = (l) => l.length > 1 ? `${l.slice(0, -1).join(', ')} y ${l.at(-1)}` : l[0];
+  const filas = em.socios.map((s) => {
+    const f = r(s.falta), prev = r(s.previo);
+    const detalle = [`le toca ${money(s.toca, c)}`, prev ? `${prev > 0 ? 'más' : 'menos'} ${money(Math.abs(prev), c)} ${prev > 0 ? 'que quedó pendiente' : 'a favor'} de meses anteriores` : '', `ha puesto ${money(s.puso, c)}`].filter(Boolean).join(' · ');
+    return `<div class="pone"><span><b style="color:var(--${esc(s.id)},var(--alejo))">${esc(s.nombre)}</b><small class="suave">${detalle}</small></span>
+      <span class="pone-v"><b class="num ${f > 0 ? 'sale' : 'entra'}">${f > 0 ? money(f, c) : f < 0 ? `+${money(-f, c)}` : '✓'}</b><small class="suave">${f > 0 ? 'le falta' : f < 0 ? 'puso de más' : 'al día'}</small></span></div>`;
+  }).join('');
+  const total = faltan.reduce((a, s) => a + r(s.falta), 0), despues = saldo + total;
+  let guia;
+  if (!faltan.length) guia = `<b>✓ Este mes está cubierto.</b>${demas.length ? ` ${lista(demas.map((s) => `${esc(s.nombre)} puso ${money(-r(s.falta), c)} de más`))}: se le descuenta el próximo mes.` : ''}`;
+  else if (em.estimado) guia = `Falta registrar ${esc(lista(em.pendientes.map((p) => p.concepto.toLowerCase())))}. Cuando se registre${em.pendientes.length > 1 ? 'n' : ''}, la cifra se ajusta sola.
+    Lo que le falta a cada uno se puede pagar directo${cj ? ` o enviándoselo a ${esc(cj.nombre)}` : ''}.${cj && saldo < 0 ? ` Por ahora ${esc(cj.nombre)} ha puesto ${money(-saldo, c)} de su plata.` : ''}`;
+  else if (cj) guia = `<b>Envíenle a ${esc(cj.nombre)}: ${faltan.map((s) => `${esc(s.nombre)} ${money(r(s.falta), c)}`).join(' · ')}.</b>
+    ${saldo < 0 ? `Con eso se le devuelven los ${money(-saldo, c)} que puso` : 'Con eso'}${despues >= 0 ? ` ${saldo < 0 ? 'y le quedan' : 'la caja queda con'} ${money(despues, c)} para los próximos gastos.` : `, pero aún le quedarían debiendo ${money(-despues, c)}.`}`;
+  else guia = `Cada uno debe poner lo que le falta.`;
+  return `<div class="pone-bloque">
+    <div class="pone-cab"><span class="eti">Cuánto pone cada uno</span><span class="chip ${em.estimado ? 'est' : 'fin'}">${em.estimado ? 'Estimado' : 'Cifra final'}</span></div>
+    <p class="suave" style="margin:4px 0 6px;font-size:13.5px">${em.neto >= 0 ? `${money(em.neto, c)} entre los dos este mes: gastos menos arriendo.` : `Este mes el arriendo cubre todo y sobran ${money(-em.neto, c)}.`}</p>
+    ${filas}<div class="guia">${guia}</div></div>`;
 }
 
 function quienTxt(m, i) {
@@ -942,7 +973,7 @@ function formNuevaInv() {
     const moneda = fd.get('moneda'), id = fd.get('nombre').toLowerCase().normalize('NFD').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '') + '-' + nuevoId().slice(-4);
     const x = { id, nombre: fd.get('nombre').trim(), ubicacion: fd.get('ubicacion').trim(), moneda, precioCompra: leerValor(fd.get('precio'), moneda),
       area: leerValor(fd.get('area'), 'USD') || null, valorEstimado: leerValor(fd.get('precio'), moneda),
-      socios: [{ id: 'alejo', nombre: 'Alejo', pct: 50 }, { id: 'sebas', nombre: 'Sebas', pct: 50 }], fijos: [], compromisos: [], recordatorios: [] };
+      socios: [{ id: 'alejo', nombre: 'Alejo', pct: 50 }, { id: 'sebas', nombre: 'Sebas', pct: 50 }], fijos: [], compromisos: [], recordatorios: [], cuadreDesde: ym(hoy()) };
     await api.guardarInv(x); elegirInv(id); S.tab = 'resumen';
   });
 }
