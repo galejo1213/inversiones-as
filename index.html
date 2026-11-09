@@ -701,6 +701,7 @@ function bloquePago(i, em, c) {
   else if (cj) guia = `<b>Envíenle a ${esc(cj.nombre)}: ${faltan.map((s) => `${esc(s.nombre)} ${money(r(s.falta), c)}`).join(' · ')}.</b>
     ${saldo < 0 ? `Con eso se le devuelven los ${money(-saldo, c)} que puso` : 'Con eso'}${despues >= 0 ? ` ${saldo < 0 ? 'y le quedan' : 'la caja queda con'} ${money(despues, c)} para los próximos gastos.` : `, pero aún le quedarían debiendo ${money(-despues, c)}.`}`;
   else guia = `Cada uno debe poner lo que le falta.`;
+  if (faltan.length && demas.length) guia += ` ${lista(demas.map((s) => `${esc(s.nombre)} puso ${money(-r(s.falta), c)} de más`))}: se le descuenta el próximo mes.`;
   return `<div class="pone-bloque">
     <div class="pone-cab"><span class="eti">Cuánto pone cada uno</span><span class="chip ${em.estimado ? 'est' : 'fin'}">${em.estimado ? 'Estimado' : 'Cifra final'}</span></div>
     <p class="suave" style="margin:4px 0 6px;font-size:13.5px">${em.neto >= 0 ? `${money(em.neto, c)} entre los dos este mes: gastos menos arriendo.` : `Este mes el arriendo cubre todo y sobran ${money(-em.neto, c)}.`}</p>
