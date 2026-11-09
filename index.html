@@ -150,6 +150,11 @@ input,select,textarea{border:1px solid var(--linea);border-radius:10px;padding:1
 .cajac{display:block}.cajas{text-align:right;font-size:13px}
 @media (max-width:520px){.cajaf{grid-template-columns:minmax(0,1fr) auto}.cajas{grid-column:2;font-size:12px}}
 
+.rastro{border:1px solid var(--linea);border-radius:12px;padding:10px 14px;font-size:14px}
+.rastro summary{cursor:pointer;font-weight:600;color:var(--suave)}
+.rastro ul{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}
+.rastro li{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+
 /* login */
 .login{min-height:100vh;display:grid;place-items:center;padding:24px}
 .login .c{max-width:420px;text-align:left}
@@ -220,7 +225,7 @@ function corto(n) {
 const pct = (x, d = 1) => `${(x * 100).toLocaleString('es-CO', { maximumFractionDigits: d })} %`;
 
 // ── Estado ────────────────────────────────────────────────────
-const S = { user: null, cargando: true, sinAcceso: false, invs: {}, movs: [], invId: null, tab: 'resumen', f: { anio: '', tipo: '', q: '' }, demo: false, error: '', yo: null, verComo: null, accesos: [] };
+const S = { user: null, cargando: true, sinAcceso: false, invs: {}, movs: [], papelera: [], invId: null, tab: 'resumen', f: { anio: '', tipo: '', q: '' }, demo: false, error: '', yo: null, verComo: null, accesos: [] };
 const inv = () => S.invs[S.invId];
 const cur = () => inv()?.moneda || 'COP';
 // Quién está usando la app. Sin documento de acceso = el dueño (las reglas de Firebase solo dejan entrar a él así).
@@ -232,11 +237,40 @@ const nombreCaja = (id) => (inv()?.cajas || []).find((x) => x.id === id)?.nombre
 try { S.invId = localStorage.getItem('inv'); } catch {}
 
 // ── Datos: Firebase o vista previa en memoria ────────────────
+function ponerMovs(l) { S.movs = l.filter((m) => !m.borrado); S.papelera = l.filter((m) => m.borrado); }
+
+// Rastro: quién registró o cambió cada movimiento y cómo estaba antes. Borrar = mandar a la papelera.
+const quienSoy = () => S.yo?.nombre || 'Alejo'; // sin documento de acceso solo entra el dueño
+const CAMPOS_MOV = ['tipo', 'fecha', 'valor', 'concepto', 'categoria', 'aportes', 'cuenta', 'nota', 'sentido'];
+function foto(m) {
+  const f = {};
+  for (const k of CAMPOS_MOV) if (m[k] !== undefined && m[k] !== '') f[k] = m[k];
+  if (f.aportes) f.aportes = Object.fromEntries(Object.entries(f.aportes).filter(([, v]) => +v).sort());
+  return f;
+}
+const marca = () => ({ por: quienSoy(), fecha: new Date().toISOString() });
+const conCambio = (m, x) => [...(m.cambios || []), x].slice(-15);
+async function guardarConRastro(nuevo) {
+  const previo = S.movs.find((x) => x.id === nuevo.id);
+  if (!previo) return api.guardarMov({ ...nuevo, creado: nuevo.creado || marca() });
+  if (JSON.stringify(foto(previo)) === JSON.stringify(foto(nuevo))) return;
+  return api.guardarMov({ ...nuevo, creado: previo.creado ?? null, cambios: conCambio(previo, { ...marca(), antes: foto(previo) }) });
+}
+async function aPapelera(id) {
+  const m = S.movs.find((x) => x.id === id);
+  if (!confirm(`¿Mover "${m.concepto}" a la papelera?\n\nLas cuentas dejan de contarlo. Lo puedes restaurar cuando quieras desde Movimientos → Papelera.`)) return false;
+  await api.guardarMov({ ...m, borrado: marca() });
+  return true;
+}
+async function restaurar(id) {
+  const { borrado, ...m } = S.papelera.find((x) => x.id === id);
+  await api.guardarMov({ ...m, cambios: conCambio(m, { ...marca(), accion: 'lo sacó de la papelera', antes: foto(m) }) });
+}
 let api;
 async function conectarFirebase() {
   const [{ initializeApp }, A, F] = await Promise.all([
     import(SDK + 'firebase-app.js'), import(SDK + 'firebase-auth.js'), import(SDK + 'firebase-firestore.js')]);
-  const app = initializeApp(FIREBASE_CONFIG), auth = A.getAuth(app), db = F.getFirestore(app);
+  const app = initializeApp(FIREBASE_CONFIG), auth = A.getAuth(app), db = F.initializeFirestore(app, { ignoreUndefinedProperties: true });
   let offMovs = null, offInvs = null, offAcc = null;
   const fallo = (e) => { if (e.code === 'permission-denied') S.sinAcceso = true; else S.error = e.message; S.cargando = false; render(); };
   api = {
@@ -245,7 +279,7 @@ async function conectarFirebase() {
     verMovs(id) {
       offMovs?.();
       S.movs = [];
-      offMovs = F.onSnapshot(F.collection(db, 'inversiones', id, 'movimientos'), (q) => { S.movs = q.docs.map((d) => d.data()); render(); }, fallo);
+      offMovs = F.onSnapshot(F.collection(db, 'inversiones', id, 'movimientos'), (q) => { ponerMovs(q.docs.map((d) => d.data())); render(); }, fallo);
     },
     guardarInv: (x) => F.setDoc(F.doc(db, 'inversiones', x.id), x),
     guardarMov: (m) => F.setDoc(F.doc(db, 'inversiones', S.invId, 'movimientos', m.id), m),
@@ -287,13 +321,14 @@ async function conectarFirebase() {
 function vistaPrevia(seed) {
   S.demo = true; S.user = { email: 'vista previa' }; S.cargando = false;
   const movs = {};
-  const emitir = () => { S.movs = [...(movs[S.invId] || [])]; render(); };
+  const emitir = () => { ponerMovs([...(movs[S.invId] || [])]); render(); };
+  const limpio = (x) => JSON.parse(JSON.stringify(x)); // como Firestore con ignoreUndefinedProperties
   api = {
     entrar() {}, salir() {},
     verMovs: emitir,
     guardarInv: async (x) => { S.invs[x.id] = structuredClone(x); render(); },
-    guardarMov: async (m) => { const l = (movs[S.invId] ??= []); const k = l.findIndex((x) => x.id === m.id); k < 0 ? l.push(m) : (l[k] = m); emitir(); },
-    guardarMovs: async (ms) => { const l = (movs[S.invId] ??= []); for (const m of ms) { const k = l.findIndex((x) => x.id === m.id); k < 0 ? l.push(m) : (l[k] = m); } emitir(); },
+    guardarMov: async (m) => { m = limpio(m); const l = (movs[S.invId] ??= []); const k = l.findIndex((x) => x.id === m.id); k < 0 ? l.push(m) : (l[k] = m); emitir(); },
+    guardarMovs: async (ms) => { const l = (movs[S.invId] ??= []); for (const m of limpio(ms)) { const k = l.findIndex((x) => x.id === m.id); k < 0 ? l.push(m) : (l[k] = m); } emitir(); },
     borrarMov: async (id) => { movs[S.invId] = movs[S.invId].filter((x) => x.id !== id); emitir(); },
     guardarAcceso: async (email, x) => { S.accesos = [...S.accesos.filter((a) => a.email !== email), { email, ...x }]; render(); },
     borrarAcceso: async (email) => { S.accesos = S.accesos.filter((a) => a.email !== email); render(); },
@@ -414,6 +449,7 @@ const VISTAS = {
   },
 
   movimientos(i) {
+    if (S.f.papelera) return vistaPapelera(i);
     const c = i.moneda, { anio, tipo, q } = S.f, t = q.trim().toLowerCase();
     const anios = [...new Set(S.movs.map((m) => m.fecha.slice(0, 4)))].sort().reverse();
     const lista = S.movs.filter((m) => (!anio || m.fecha.startsWith(anio)) && (!tipo || m.tipo === tipo)
@@ -427,7 +463,8 @@ const VISTAS = {
     return `<div class="filtros">
         <input type="search" placeholder="Buscar concepto, categoría o nota" value="${esc(q)}" data-f="q" aria-label="Buscar">
         <select data-f="anio" aria-label="Año"><option value="">Todos los años</option>${anios.map((a) => `<option ${a === anio ? 'selected' : ''}>${a}</option>`).join('')}</select>
-        <select data-f="tipo" aria-label="Tipo"><option value="">Todo</option>${Object.entries(TIPOS).map(([k, v]) => `<option value="${k}" ${k === tipo ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+        <select data-f="tipo" aria-label="Tipo"><option value="">Todo</option>${Object.entries(TIPOS).map(([k, v]) => `<option value="${k}" ${k === tipo ? 'selected' : ''}>${v}</option>`).join('')}</select>
+        ${S.papelera.length ? `<button class="btn" data-act="papelera">Papelera (${S.papelera.length})</button>` : ''}</div>
       <div class="rejilla"><div class="s8">${Object.entries(grupos).map(([k, ms]) => {
         const ing = ms.filter((m) => m.tipo === 'ingreso').reduce((a, m) => a + m.valor, 0), gas = ms.filter((m) => m.tipo === 'gasto').reduce((a, m) => a + m.valor, 0);
         return `<section class="mesg"><header><b>${mesTxt(k, true)}</b><span class="suave num" style="font-size:13px">${ing ? `<span class="entra">+${corto(ing)}</span> · ` : ''}<span class="sale">−${corto(gas)}</span></span></header>
@@ -556,6 +593,18 @@ const VISTAS = {
           <span class="num suave cajas">${money(m.saldo, c)}</span></div>`).join('') || '<p class="suave">Aún no hay movimientos.</p>'}</div></section></div>`;
   },
 };
+
+function vistaPapelera(i) {
+  const c = i.moneda, dueno = !S.yo && !S.verComo;
+  const l = [...S.papelera].sort((a, b) => b.borrado.fecha.localeCompare(a.borrado.fecha));
+  return `<p><button class="btn" data-act="papelera">← Volver a movimientos</button></p>
+    <section class="c"><h2>Papelera <span class="eti">${l.length}</span></h2>
+    <p class="suave" style="margin-top:0">Lo que se borra queda aquí y no cuenta en ninguna cuenta. Restáuralo si fue un error.</p>
+    ${l.map((m) => `<div class="fila"><span>${esc(m.concepto)} · <b class="num">${money(m.valor, c)}</b><br>
+      <small class="suave">${fechaTxt(m.fecha)} · ${esc(m.categoria)} · lo borró ${esc(m.borrado.por)} el ${fechaTxt(m.borrado.fecha.slice(0, 10))}</small></span>
+      <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${puede(m) ? `<button class="btn sm" data-act="restaurar" data-id="${esc(m.id)}">Restaurar</button>` : ''}
+      ${dueno ? `<button class="btn sm peli" data-act="borrarSiempre" data-id="${esc(m.id)}">Borrar para siempre</button>` : ''}</span></div>`).join('') || '<p class="suave">La papelera está vacía.</p>'}</section>`;
+}
 
 function vistaAccesos(i) {
   const roles = [...i.socios.filter((s) => s.id !== 'alejo').map((s) => [`socio:${s.id}`, `Socio · ${s.nombre} (ve y edita todo)`, { rol: 'socio', socio: s.id, nombre: s.nombre }]),
@@ -697,7 +746,7 @@ function formMov(m) {
     aporte: ['¿Quién envió la plata?', opsSocios + (destino ? op('otro', 'Otra persona (arrendatario…)') : '') + (quien === 'mitad' ? op('mitad', 'Mitad y mitad') : '') + legado] }[m.tipo];
   const tipos = admin ? [] : ['gasto', 'ingreso', 'aporte'];
   const titulo = !editable ? 'Detalle' : nuevo ? (esAbono ? 'Abono entre socios' : m.tipo === 'aporte' ? (destino ? `Plata para la caja de ${nombreCaja(destino)}` : 'Envío de plata') : m.tipo === 'ingreso' ? 'Nuevo ingreso' : 'Nuevo pago') : 'Editar movimiento';
-  abrir(`<form>
+  abrir(`<form data-mov-id="${esc(m.id || '')}">
     <h2>${titulo}</h2>
     <fieldset ${editable ? '' : 'disabled'} style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:14px;min-width:0">
     ${m.tipo === 'ajuste' || !tipos.length || !nuevo ? `<input type="hidden" name="tipo" value="${esc(m.tipo)}">` : `<div class="segm" role="radiogroup" aria-label="Tipo">${tipos.map((k) => `<label><input type="radio" name="tipo" value="${k}" ${m.tipo === k ? 'checked' : ''}>${{ gasto: 'Pago', ingreso: 'Ingreso', aporte: 'Envío de plata' }[k]}</label>`).join('')}</div>`}
@@ -713,7 +762,8 @@ function formMov(m) {
       ${m.tipo === 'aporte' && !admin && cajas.length ? `<label>¿A dónde llegó?<select name="destino"><option value="">Directo al apto (no pasa por una caja)</option>${cajas.map((x) => `<option value="${esc(x.id)}" ${destino === x.id ? 'selected' : ''}>Caja de ${esc(x.nombre)}</option>`).join('')}</select></label>`
         : `<input type="hidden" name="destino" value="${esc(destino)}">`}`}
     <label>Nota<textarea name="nota" rows="2" placeholder="Opcional">${esc(m.nota)}</textarea></label></fieldset>
-    <div class="acc">${nuevo || !editable ? '<span></span>' : '<button type="button" class="btn peli" data-act="borrarMov">Borrar</button>'}<div>${editable ? `${cerrarBtn}<button class="btn pri">${nuevo ? 'Guardar' : 'Guardar cambios'}</button>` : '<button type="button" class="btn" data-act="cerrar">Cerrar</button>'}</div></div></form>`,
+    ${nuevo ? '' : rastroHtml(m.id)}
+    <div class="acc">${nuevo || !editable ? '<span></span>' : '<button type="button" class="btn peli" data-act="borrarMov">Mover a la papelera</button>'}<div>${editable ? `${cerrarBtn}<button class="btn pri">${nuevo ? 'Guardar' : 'Guardar cambios'}</button>` : '<button type="button" class="btn" data-act="cerrar">Cerrar</button>'}</div></div></form>`,
   async (fd) => {
     const valor = leerValor(fd.get('valor')), q = fd.get('quien');
     let tipo = fd.get('tipo'), cuenta = null, aportes = {};
@@ -732,7 +782,7 @@ function formMov(m) {
       else if (q !== 'mes') aportes = aportesDe(q, valor, tipo, i.socios);
     }
     const { cuenta: _c, quien: _q, de: _d, ...resto } = m;
-    await api.guardarMov({ ...resto, id: m.id || nuevoId(), tipo, fecha: fd.get('fecha'), valor, concepto: fd.get('concepto').trim(),
+    await guardarConRastro({ ...resto, id: m.id || nuevoId(), tipo, fecha: fd.get('fecha'), valor, concepto: fd.get('concepto').trim(),
       categoria: (fd.get('categoria') || '').trim() || (tipo === 'ingreso' ? 'Otros ingresos' : CATEGORIAS[tipo]?.at(-1) ?? 'Otros'),
       nota: fd.get('nota').trim(), aportes, ...(cuenta ? { cuenta } : {}) });
   });
@@ -744,16 +794,48 @@ function formMov(m) {
     formMov({ ...m, tipo: e.target.value, quien: undefined, cuenta: undefined, categoria: '', fecha: fd.get('fecha'), valor: leerValor(fd.get('valor')) || '', concepto: fd.get('concepto'), nota: fd.get('nota') });
   });
   $('[data-act=borrarMov]', f)?.addEventListener('click', async () => {
-    if (!confirm(`¿Borrar "${m.concepto}"? No se puede deshacer.`)) return;
-    await api.borrarMov(m.id); dlg.close();
+    if (await aPapelera(m.id)) dlg.close();
   });
 }
+
+function rastroHtml(id) {
+  const m = S.movs.find((x) => x.id === id), c = cur();
+  if (!m || (!m.creado && !m.cambios?.length)) return '';
+  const cuando = (iso) => new Date(iso).toLocaleString('es-CO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const dif = (a, b) => {
+    const q = (x) => quienTxt({ tipo: x.tipo, cuenta: x.cuenta, aportes: x.aportes }, inv());
+    const l = [];
+    if (a.valor !== b.valor) l.push(`valor ${money(a.valor, c)} → ${money(b.valor, c)}`);
+    if (a.fecha !== b.fecha) l.push(`fecha ${fechaTxt(a.fecha)} → ${fechaTxt(b.fecha)}`);
+    if (a.concepto !== b.concepto) l.push(`concepto "${esc(a.concepto)}" → "${esc(b.concepto)}"`);
+    if (q(a) !== q(b)) l.push(`${esc(q(a))} → ${esc(q(b))}`);
+    if (a.categoria !== b.categoria) l.push(`categoría ${esc(a.categoria)} → ${esc(b.categoria)}`);
+    if ((a.nota || '') !== (b.nota || '')) l.push('la nota');
+    return l.join(' · ');
+  };
+  const filas = (m.cambios || []).map((x, k) => {
+    const despues = foto(k + 1 < m.cambios.length ? m.cambios[k + 1].antes : m);
+    return `<li><span><b>${esc(x.por)}</b> ${esc(x.accion || 'cambió')} ${dif(x.antes, despues)}<br><small class="suave">${cuando(x.fecha)}</small></span>
+      ${puede(m) && !x.accion ? `<button type="button" class="btn sm" data-volver="${k}">Volver a como estaba</button>` : ''}</li>`;
+  }).reverse();
+  return `<details class="rastro"><summary>Historial · ${m.cambios?.length ? `${m.cambios.length} cambio${m.cambios.length > 1 ? 's' : ''}` : 'sin cambios'}</summary><ul>
+    ${filas.join('')}${m.creado ? `<li><span>Registrado por <b>${esc(m.creado.por)}</b><br><small class="suave">${cuando(m.creado.fecha)}</small></span></li>` : ''}</ul></details>`;
+}
+// "Volver a como estaba" deja también su propio rastro
+dlg.addEventListener('click', async (e) => {
+  const k = e.target.closest('[data-volver]')?.dataset.volver;
+  if (k === undefined) return;
+  const id = $('[data-mov-id]', dlg)?.dataset.movId, m = S.movs.find((x) => x.id === id);
+  if (!m || !confirm('¿Dejar este movimiento como estaba antes de ese cambio?')) return;
+  const base = Object.fromEntries(Object.entries(m).filter(([f]) => !CAMPOS_MOV.includes(f)));
+  try { await guardarConRastro({ ...base, ...m.cambios[+k].antes }); dlg.close(); } catch (err) { alert(`No se pudo guardar: ${err.message}`); }
+});
 
 // Movimientos que solo mueven la caja (envíos viejos, abonos a quien la maneja, saldo inicial)
 function formCaja(m) {
   const i = inv(), nuevo = !m.id, editable = nuevo || puede(m);
   m = { fecha: hoy(), concepto: '', categoria: 'Pago a Yaneth', valor: '', nota: '', sentido: 'sale', aportes: {}, cuenta: miCaja() || i.cajas?.[0]?.id, ...m, tipo: 'caja' };
-  abrir(`<form><h2>${editable ? (nuevo ? 'Otro movimiento de la caja' : 'Editar movimiento de caja') : 'Detalle'}</h2>
+  abrir(`<form data-mov-id="${esc(m.id || '')}"><h2>${editable ? (nuevo ? 'Otro movimiento de la caja' : 'Editar movimiento de caja') : 'Detalle'}</h2>
     <fieldset ${editable ? '' : 'disabled'} style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:14px;min-width:0">
     <p class="suave" style="margin:0;font-size:13px">Para plata que entra o sale de la caja de ${esc(nombreCaja(m.cuenta))} sin ser un pago del apto (por ejemplo, un abono a ${esc(nombreCaja(m.cuenta))}).</p>
     <div class="segm" role="radiogroup" aria-label="Sentido"><label><input type="radio" name="sentido" value="entra" ${m.sentido === 'entra' ? 'checked' : ''}>Entra a la caja</label><label><input type="radio" name="sentido" value="sale" ${m.sentido === 'sale' ? 'checked' : ''}>Sale de la caja</label></div>
@@ -761,15 +843,15 @@ function formCaja(m) {
     <label>Concepto<input name="concepto" required value="${esc(m.concepto)}" placeholder="Ej. Abono a Yaneth"></label>
     <label>Categoría<select name="categoria">${[...new Set([m.categoria, ...CATEGORIAS.caja])].map((x) => `<option ${x === m.categoria ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
     <label>Nota<textarea name="nota" rows="2">${esc(m.nota)}</textarea></label></fieldset>
-    <div class="acc">${nuevo || !editable ? '<span></span>' : '<button type="button" class="btn peli" data-act="borrarMov">Borrar</button>'}<div>${editable ? `${cerrarBtn}<button class="btn pri">Guardar</button>` : '<button type="button" class="btn" data-act="cerrar">Cerrar</button>'}</div></div></form>`,
+    ${nuevo ? '' : rastroHtml(m.id)}
+    <div class="acc">${nuevo || !editable ? '<span></span>' : '<button type="button" class="btn peli" data-act="borrarMov">Mover a la papelera</button>'}<div>${editable ? `${cerrarBtn}<button class="btn pri">Guardar</button>` : '<button type="button" class="btn" data-act="cerrar">Cerrar</button>'}</div></div></form>`,
   async (fd) => {
     const valor = leerValor(fd.get('valor'));
     if (valor <= 0) throw new Error('El valor debe ser mayor a 0.');
-    await api.guardarMov({ ...m, id: m.id || nuevoId(), fecha: fd.get('fecha'), valor, concepto: fd.get('concepto').trim(), categoria: fd.get('categoria'), sentido: fd.get('sentido'), nota: fd.get('nota').trim() });
+    await guardarConRastro({ ...m, id: m.id || nuevoId(), fecha: fd.get('fecha'), valor, concepto: fd.get('concepto').trim(), categoria: fd.get('categoria'), sentido: fd.get('sentido'), nota: fd.get('nota').trim() });
   });
   $('[data-act=borrarMov]', dlg)?.addEventListener('click', async () => {
-    if (!confirm(`¿Borrar "${m.concepto}"? No se puede deshacer.`)) return;
-    await api.borrarMov(m.id); dlg.close();
+    if (await aPapelera(m.id)) dlg.close();
   });
 }
 
@@ -851,7 +933,7 @@ function exportar() {
 document.addEventListener('click', async (e) => {
   const t = e.target.closest('[data-tab],[data-act],[data-mov]');
   if (!t) return;
-  if (t.dataset.tab) { e.preventDefault(); S.tab = t.dataset.tab; render(); scrollTo(0, 0); return; }
+  if (t.dataset.tab) { e.preventDefault(); S.tab = t.dataset.tab; S.f.papelera = false; render(); scrollTo(0, 0); return; }
   if (t.dataset.mov && !t.dataset.act) return formMov(structuredClone(S.movs.find((m) => m.id === t.dataset.mov)));
   const act = t.dataset.act;
   try {
@@ -869,6 +951,9 @@ document.addEventListener('click', async (e) => {
     else if (act === 'pagarCaja') formMov({ tipo: 'gasto', cuenta: inv().cajas[0].id });
     else if (act === 'otroCaja') formCaja({ cuenta: inv().cajas[0].id });
     else if (act === 'verComo') { S.verComo = t.dataset.v ? JSON.parse(t.dataset.v) : null; S.tab = S.verComo?.rol === 'administra' ? 'caja' : 'resumen'; render(); scrollTo(0, 0); }
+    else if (act === 'papelera') { S.f.papelera = !S.f.papelera; render(); scrollTo(0, 0); }
+    else if (act === 'restaurar') await restaurar(t.dataset.id);
+    else if (act === 'borrarSiempre') { const m = S.papelera.find((x) => x.id === t.dataset.id); if (confirm(`¿Borrar "${m.concepto}" para siempre? Esto sí no se puede deshacer.`)) await api.borrarMov(m.id); }
     else if (act === 'quitarAcceso') { if (confirm(`¿Quitarle el acceso a ${t.dataset.email}?`)) await api.borrarAcceso(t.dataset.email); }
     else if (act === 'abono') formMov({ tipo: 'ajuste', categoria: 'Abono entre socios' });
     else if (act === 'recordatorio') formRecordatorio(t.dataset.id);
