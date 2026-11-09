@@ -309,7 +309,7 @@ async function conectarFirebase() {
     try { const d = await F.getDoc(F.doc(db, 'accesos', u.email.toLowerCase())); if (d.exists()) S.yo = d.data(); }
     catch (e) { if (e.code !== 'permission-denied') S.error = e.message; }
     if (!S.yo) offAcc = F.onSnapshot(F.collection(db, 'accesos'), (q) => { S.accesos = q.docs.map((d) => ({ email: d.id, ...d.data() })); render(); }, () => {});
-    if (S.yo?.rol === 'administra') S.tab = 'caja';
+    if (S.yo?.caja) S.tab = 'caja';
     offInvs = F.onSnapshot(F.collection(db, 'inversiones'), (q) => {
       S.invs = Object.fromEntries(q.docs.map((d) => [d.id, d.data()]));
       S.cargando = false;
@@ -564,7 +564,7 @@ const VISTAS = {
   caja(i) {
     const cj = (i.cajas || [])[0], c = i.moneda;
     if (!cj) return '<div class="c vacio"><p class="suave">Esta inversión no tiene una caja administrada.</p></div>';
-    const l = movsCaja(S.movs, cj.id), ult = l.at(-1), saldo = Math.round(ult?.saldo || 0), admin = !esSocio();
+    const l = movsCaja(S.movs, cj.id), ult = l.at(-1), saldo = Math.round(ult?.saldo || 0), mia = miCaja() === cj.id;
     const entra = {}, sale = {};
     for (const m of l) {
       if (m.efecto > 0) { const k = m.de || Object.keys(m.aportes || {}).find((x) => m.aportes[x] > 0) || 'otros'; entra[k] = (entra[k] || 0) + m.efecto; }
@@ -577,8 +577,8 @@ const VISTAS = {
         <div class="big num ${saldo < 0 ? 'sale' : ''}">${money(Math.abs(saldo), c)}</div>
         <p class="suave" style="margin:6px 0 16px">${saldo < 0 ? `<b>Le deben a ${esc(cj.nombre)}.</b> Ha pagado esto de su plata y se le devuelve con el próximo envío.` : saldo > 0 ? `${esc(cj.nombre)} tiene esta plata de ustedes para los próximos pagos.` : 'La caja está en cero.'}</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn pri" data-act="recibir">${admin ? 'Recibí plata' : `Envié plata a ${esc(cj.nombre)}`}</button>
-          <button class="btn" data-act="pagarCaja">${admin ? 'Pagué algo' : `${esc(cj.nombre)} pagó algo`}</button>
+          <button class="btn pri" data-act="recibir">${mia ? 'Recibí plata' : `Envié plata a ${esc(cj.nombre)}`}</button>
+          <button class="btn" data-act="pagarCaja">${mia ? 'Pagué algo' : `${esc(cj.nombre)} pagó algo`}</button>
           <button class="btn" data-act="otroCaja">Otro movimiento</button></div>
         <div class="graf" style="margin-top:22px">${grafSaldo(l, c)}</div>
         <p class="suave" style="font-size:12.5px;margin:6px 0 0">Saldo en el tiempo. Por debajo de la línea, ${esc(cj.nombre)} estaba poniendo de su plata.</p></section>
@@ -608,15 +608,16 @@ function vistaPapelera(i) {
 
 function vistaAccesos(i) {
   const roles = [...i.socios.filter((s) => s.id !== 'alejo').map((s) => [`socio:${s.id}`, `Socio · ${s.nombre} (ve y edita todo)`, { rol: 'socio', socio: s.id, nombre: s.nombre }]),
-    ...(i.cajas || []).map((x) => [`administra:${x.id}`, `Administra la caja de ${x.nombre} (ve todo, edita solo su caja)`, { rol: 'administra', caja: x.id, nombre: x.nombre }])];
-  const etiqueta = (a) => (a.rol === 'socio' ? 'Socio' : `Administra la caja`);
+    ...(i.cajas || []).flatMap((x) => [[`todo:${x.id}`, `${x.nombre} · ve y edita todo (sus pagos salen de su caja)`, { rol: 'socio', caja: x.id, nombre: x.nombre }],
+      [`administra:${x.id}`, `${x.nombre} · ve todo, edita solo su caja`, { rol: 'administra', caja: x.id, nombre: x.nombre }]])];
+  const etiqueta = (a) => (a.rol === 'administra' ? 'Ve todo, edita solo su caja' : a.caja ? 'Ve y edita todo · maneja la caja' : 'Socio · ve y edita todo');
   return `<section class="c s12"><h2>Quién puede entrar</h2>
     <p class="suave" style="margin-top:0">Tú siempre tienes acceso. Agrega aquí el Gmail de cada persona; sin esto, la app no la deja entrar.</p>
     ${S.accesos.map((a) => `<div class="fila"><span><b>${esc(a.nombre)}</b> · ${esc(a.email)}<br><small class="suave">${etiqueta(a)}</small></span>
       <span style="display:flex;gap:6px"><button class="btn sm" data-act="verComo" data-v="${esc(JSON.stringify(a))}">Ver como</button><button class="btn sm peli" data-act="quitarAcceso" data-email="${esc(a.email)}">Quitar</button></span></div>`).join('') || '<p class="suave">Por ahora solo entras tú.</p>'}
     <form data-act="acceso" class="dos" style="margin-top:14px;align-items:end">
       <label>Gmail<input name="email" type="email" required placeholder="nombre@gmail.com"></label>
-      <label>Qué puede hacer<select name="rol">${roles.map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join('')}</select></label>
+      <label>Qué puede hacer<select name="rol">${roles.map(([, t, x]) => `<option value="${esc(JSON.stringify(x))}">${esc(t)}</option>`).join('')}</select></label>
       <button class="btn pri">Dar acceso</button></form>
     <p class="suave" style="margin:18px 0 8px">Antes de dar acceso, mira la app como la verá cada uno:</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">${roles.map(([, , x]) => `<button class="btn sm" data-act="verComo" data-v="${esc(JSON.stringify(x))}">Ver como ${esc(x.nombre)}</button>`).join('')}</div></section>`;
@@ -735,7 +736,9 @@ function formMov(m) {
   m = { tipo: 'gasto', fecha: hoy(), concepto: '', categoria: '', valor: '', nota: '', aportes: {}, ...m };
   const esAbono = m.tipo === 'ajuste' && m.categoria === 'Abono entre socios';
   const de = esAbono ? Object.entries(m.aportes).find(([, v]) => v > 0)?.[0] : null, para = esAbono ? Object.entries(m.aportes).find(([, v]) => v < 0)?.[0] : null;
-  const quien = m.quien || (nuevo ? (m.cuenta ? 'caja:' + m.cuenta : admin ? (m.tipo === 'aporte' ? i.socios[0].id : 'caja:' + miCaja()) : yo().socio || i.socios[0].id) : quienDe(m, i));
+  // Por defecto: quien maneja la caja paga desde su caja; un socio, de su bolsillo; un envío lo hace un socio
+  const porDefecto = m.tipo === 'aporte' ? yo().socio || i.socios[0].id : m.cuenta ? 'caja:' + m.cuenta : miCaja() ? 'caja:' + miCaja() : yo().socio || i.socios[0].id;
+  const quien = m.quien || (nuevo ? porDefecto : quienDe(m, i));
   const destino = m.tipo === 'aporte' ? (m.cuenta ?? (nuevo ? miCaja() || cajas[0]?.id || '' : '')) : '';
   const op = (v, t) => `<label><input type="radio" name="quien" value="${esc(v)}" ${quien === v ? 'checked' : ''}>${esc(t)}</label>`;
   const opsCaja = cajas.filter((x) => !admin || x.id === miCaja()).map((x) => op('caja:' + x.id, `Caja de ${x.nombre}`)).join('');
@@ -891,10 +894,11 @@ function formNuevaInv() {
 
 function menuMas() {
   const cj = inv().cajas?.[0], n = cj ? esc(cj.nombre) : '';
-  const ops = esSocio()
-    ? [['gasto', 'Registrar un pago', 'Admon, cuota, arreglos, imprevistos'], ['ingreso', 'Registrar un ingreso', 'Arriendo u otro'],
-       ...(cj ? [['envio', `Envié plata a ${n}`, 'Para que pague cosas del apto']] : []), ['abono', 'Abono entre socios', ''], ['rec', 'Recordatorio', '']]
-    : [['envio', 'Recibí plata', 'De Sebas, de Alejo o de otra persona'], ['pagoCaja', 'Pagué algo', 'Con la plata de la caja o la tuya'], ['otroCaja', 'Otro movimiento de la caja', 'Por ejemplo, un abono para ti'], ['rec', 'Recordatorio', '']];
+  const deCaja = [['pagoCaja', 'Pagué algo', 'Con la plata de la caja o la tuya'], ['envio', 'Recibí plata', 'De Sebas, de Alejo o de otra persona'], ['otroCaja', 'Otro movimiento de la caja', 'Por ejemplo, un abono para ti']];
+  const ops = !esSocio() ? [...deCaja, ['rec', 'Recordatorio', '']]
+    : miCaja() ? [...deCaja, ['gasto', 'Pago hecho por Alejo o Sebas', 'Cuando lo pagó uno de ellos directo'], ['ingreso', 'Registrar un ingreso', 'Arriendo u otro'], ['rec', 'Recordatorio', '']]
+    : [['gasto', 'Registrar un pago', 'Admon, cuota, arreglos, imprevistos'], ['ingreso', 'Registrar un ingreso', 'Arriendo u otro'],
+       ...(cj ? [['envio', `Envié plata a ${n}`, 'Para que pague cosas del apto']] : []), ['abono', 'Abono entre socios', ''], ['rec', 'Recordatorio', '']];
   abrir(`<form><h2>Registrar</h2>
     ${ops.map(([k, t, d], j) => `<button type="button" class="btn ${j ? '' : 'pri'}" data-op="${k}" style="text-align:left">${t}${d ? `<br><small style="font-weight:400;opacity:.8">${d}</small>` : ''}</button>`).join('')}
     <div class="acc"><span></span><div>${cerrarBtn}</div></div></form>`, async () => {});
@@ -902,7 +906,7 @@ function menuMas() {
     const op = e.target.closest('[data-op]')?.dataset.op;
     if (!op) return;
     dlg.close();
-    ({ gasto: () => formMov({ tipo: 'gasto' }), ingreso: () => formMov({ tipo: 'ingreso', categoria: 'Arriendo' }), envio: () => formMov({ tipo: 'aporte', cuenta: cj?.id }),
+    ({ gasto: () => formMov({ tipo: 'gasto', ...(miCaja() ? { quien: inv().socios[0].id } : {}) }), ingreso: () => formMov({ tipo: 'ingreso', categoria: 'Arriendo' }), envio: () => formMov({ tipo: 'aporte', cuenta: cj?.id }),
        pagoCaja: () => formMov({ tipo: 'gasto', cuenta: cj?.id }), otroCaja: () => formCaja({}), abono: () => formMov({ tipo: 'ajuste', categoria: 'Abono entre socios' }), rec: () => formRecordatorio() })[op]();
   });
 }
@@ -950,7 +954,7 @@ document.addEventListener('click', async (e) => {
     else if (act === 'recibir') formMov({ tipo: 'aporte', cuenta: inv().cajas[0].id });
     else if (act === 'pagarCaja') formMov({ tipo: 'gasto', cuenta: inv().cajas[0].id });
     else if (act === 'otroCaja') formCaja({ cuenta: inv().cajas[0].id });
-    else if (act === 'verComo') { S.verComo = t.dataset.v ? JSON.parse(t.dataset.v) : null; S.tab = S.verComo?.rol === 'administra' ? 'caja' : 'resumen'; render(); scrollTo(0, 0); }
+    else if (act === 'verComo') { S.verComo = t.dataset.v ? JSON.parse(t.dataset.v) : null; S.tab = S.verComo?.caja ? 'caja' : 'resumen'; render(); scrollTo(0, 0); }
     else if (act === 'papelera') { S.f.papelera = !S.f.papelera; render(); scrollTo(0, 0); }
     else if (act === 'restaurar') await restaurar(t.dataset.id);
     else if (act === 'borrarSiempre') { const m = S.papelera.find((x) => x.id === t.dataset.id); if (confirm(`¿Borrar "${m.concepto}" para siempre? Esto sí no se puede deshacer.`)) await api.borrarMov(m.id); }
@@ -987,10 +991,9 @@ document.addEventListener('input', (e) => {
 document.addEventListener('submit', async (e) => {
   if (e.target.dataset.act === 'acceso') {
     e.preventDefault();
-    const fd = new FormData(e.target), email = fd.get('email').trim().toLowerCase(), [rol, id] = fd.get('rol').split(':'), i = inv();
-    const nombre = rol === 'socio' ? i.socios.find((s) => s.id === id).nombre : nombreCaja(id);
+    const fd = new FormData(e.target), email = fd.get('email').trim().toLowerCase(), x = JSON.parse(fd.get('rol'));
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return alert('Revisa el correo.');
-    try { await api.guardarAcceso(email, rol === 'socio' ? { rol, socio: id, nombre } : { rol, caja: id, nombre }); }
+    try { await api.guardarAcceso(email, x); }
     catch (err) { alert(`No se pudo guardar: ${err.message}`); }
     return;
   }
